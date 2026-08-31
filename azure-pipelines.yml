@@ -19,7 +19,7 @@ pr:
       - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'AgentSelfHosted'
 
 variables:
   - group: BigRock-Prod-Secrets
