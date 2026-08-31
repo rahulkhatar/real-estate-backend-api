@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/Logs/
+**/logs/
+**/*.user
+.vs/
+.git/
+.github/
+*.md
+azure-pipelines*.yml
+RealEstate.Tests/
+appsettings.Development.json

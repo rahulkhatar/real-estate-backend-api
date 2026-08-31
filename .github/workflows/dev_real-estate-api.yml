@@ -11,13 +11,14 @@
 #
 # NOTE: if you touch this app's Deployment Center settings in the Azure portal again, Azure
 # may regenerate/overwrite this file with the unmodified version -- re-apply these edits if so.
+#
+# SUPERSEDED by docker-deploy.yml (container-based deploy to Docker Hub + Azure Web App for
+# Containers). The push-to-main trigger below is disabled so this one no longer fires
+# automatically -- kept only as a manual (workflow_dispatch) fallback to the old binary deploy.
 
 name: Build and deploy ASP.Net Core app to Azure Web App - real-estate-api
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
