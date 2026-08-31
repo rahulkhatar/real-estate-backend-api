@@ -1,9 +1,13 @@
-# Pipeline for the RealEstateAPI project (the PROD repo). Code lands here only when promoted
-# from Dev-RealEstateAPI (`git push prod main`) — see azure-pipelines.dev.yml for the pipeline
-# that runs in the Dev-RealEstateAPI project on every day-to-day push.
+# This file lives in the Dev-RealEstateAPI repo, but the PIPELINE that runs it is defined in
+# the separate RealEstateAPI project (that's where the prod secrets and the approval gate live).
+# The RealEstateAPI-project pipeline's source is configured to point directly at THIS file in
+# Dev-RealEstateAPI, triggered by pushes to Dev-RealEstateAPI's `main` branch -- i.e. whenever a
+# `dev` -> `main` PR merges there. See the branch-flow notes at the bottom of this file for the
+# full picture; there is no second "prod" repo or manual promotion push anymore.
 #
-# Two stages: Build (build + test, runs on every push/PR into this repo) and Prod (FTP deploy
-# to BigRock, runs only on main and only after manual approval on the "prod" Environment).
+# Two stages: Build (build + test, runs on every push/PR into Dev-RealEstateAPI's main) and Prod
+# (FTP deploy to BigRock, runs only on main and only after manual approval on the "prod"
+# Environment in the RealEstateAPI project).
 #
 # One-time setup required in the Azure DevOps portal before this pipeline will run green —
 # see the checklist at the bottom of this file.
@@ -199,11 +203,15 @@ stages:
 #    kebab menu (⋮) > Approvals and checks > + > Approvals > add yourself/your approver >
 #    Create. This is what makes the Prod stage pause for review before it deploys.
 #
-# 3. First run — in the RealEstateAPI project: Pipelines > New pipeline > Azure Repos Git >
-#    RealEstateAPI > "Existing Azure Pipelines YAML file" > /azure-pipelines.yml. The first
-#    run will prompt to grant the pipeline access to the variable group — approve that once.
-#    (The separate Dev-RealEstateAPI project/repo uses azure-pipelines.dev.yml instead — see
-#    that file. It has no deploy stage and no access to this project's secrets or approval gate.)
+# 3. Pipeline source — in the RealEstateAPI project: Pipelines > [this pipeline] > Edit > the
+#    YAML source is set to the Dev-RealEstateAPI repo's /azure-pipelines.yml on branch `main`
+#    (a cross-project repository reference — the RealEstateAPI project's build service identity
+#    needs Reader access on the Dev-RealEstateAPI repo for this to work; see Project Settings >
+#    Repositories > Dev-RealEstateAPI > Security in the Dev-RealEstateAPI project). The first
+#    run will also prompt to grant the pipeline access to the variable group — approve that once.
+#    (The Dev-RealEstateAPI project has its own separate pipeline, using azure-pipelines.dev.yml
+#    — see that file. It has no deploy stage and no access to this project's secrets or approval
+#    gate.)
 #
 # 4. IMPORTANT — confirm before relying on this: this API has never been deployed to
 #    that BigRock virtual directory before. IIS there needs the ASP.NET Core Module
@@ -216,26 +224,27 @@ stages:
 #    a variable — ANCM is still required.
 #
 # ---------------------------------------------------------------------------------
-# Two-repo workflow (day-to-day dev vs. promoting to prod)
+# Branch flow (everything lives in the Dev-RealEstateAPI repo; RealEstateAPI is a pipeline-only
+# project now — no code is pushed there directly anymore)
 #
-# There is one local clone with two remotes:
-#   origin  -> Dev-RealEstateAPI   (day-to-day work; plain `git push` goes here)
-#   prod    -> RealEstateAPI       (this file's pipeline; only touched when promoting)
+#   1. Start new work from dev:
+#        git checkout dev && git pull
+#        git checkout -b feature/my-change
+#        ... commit ...
+#        git push origin feature/my-change
 #
-# Both remotes share the same commit history, so "promoting" is just pushing the same
-# commits to the second remote — no PR or merge between repos needed.
+#   2. Open a PR: feature/my-change -> dev (Azure DevOps web UI, or `az repos pr create`).
+#      azure-pipelines.dev.yml runs automatically as the PR's required build-validation check.
+#      Approve your own PR (self-approval is allowed on this repo) and complete the merge.
+#      That push to dev triggers azure-pipelines.dev.yml again — the "automated review" gate.
 #
-#   Day to day:
-#     git push                         # pushes to origin/main (Dev-RealEstateAPI) ->
-#                                       # triggers azure-pipelines.dev.yml (build+test only)
+#   3. When dev is ready to release, open a PR: dev -> main. Same build-validation check runs.
+#      Approve and complete the merge.
 #
-#   See what's on Dev but not yet promoted to Prod:
-#     git fetch --all
-#     git log prod/main..origin/main --oneline     # commits ready to promote
-#     git diff prod/main..origin/main               # the actual code diff
+#   4. That push to Dev-RealEstateAPI's main is what triggers THIS pipeline (in the RealEstateAPI
+#      project): Build stage re-validates, then the Prod stage pauses for your manual approval
+#      (Pipelines > [this run] > Review button) before FTP-deploying to BigRock.
 #
-#   Promote everything currently on Dev's main to Prod:
-#     git push prod main:main          # triggers this file's pipeline in RealEstateAPI ->
-#                                       # Build stage re-validates, then Prod stage waits
-#                                       # for your approval before FTP-deploying to BigRock
+# No manual promotion push and no second copy of the code to keep in sync — main is always
+# exactly what most recently passed through a reviewed, build-validated PR from dev.
 # ---------------------------------------------------------------------------------
