@@ -1,5 +1,9 @@
-# Two-stage pipeline: Dev (build + test, runs on every push/PR) and Prod (FTP deploy to
-# BigRock, runs only on main and only after manual approval on the "prod" Environment).
+# Pipeline for the RealEstateAPI project (the PROD repo). Code lands here only when promoted
+# from Dev-RealEstateAPI (`git push prod main`) — see azure-pipelines.dev.yml for the pipeline
+# that runs in the Dev-RealEstateAPI project on every day-to-day push.
+#
+# Two stages: Build (build + test, runs on every push/PR into this repo) and Prod (FTP deploy
+# to BigRock, runs only on main and only after manual approval on the "prod" Environment).
 #
 # One-time setup required in the Azure DevOps portal before this pipeline will run green —
 # see the checklist at the bottom of this file.
@@ -28,12 +32,12 @@ variables:
 
 stages:
   # ---------------------------------------------------------------------------------
-  # Stage 1: Dev — restore, build, run the test suite, publish a self-contained
+  # Stage 1: Build — restore, build, run the test suite, publish a self-contained
   # win-x64 build as a pipeline artifact. Runs on every push and PR into main.
-  # Nothing is deployed here — this is the "is it safe to promote" gate.
+  # Nothing is deployed here — this re-validates what was already promoted from Dev.
   # ---------------------------------------------------------------------------------
-  - stage: Dev
-    displayName: 'Dev - Build & Test'
+  - stage: Build
+    displayName: 'Build & Test'
     jobs:
       - job: BuildAndTest
         displayName: 'Build & test'
@@ -91,14 +95,14 @@ stages:
             artifact: api-publish
 
   # ---------------------------------------------------------------------------------
-  # Stage 2: Prod — only runs on main, after Dev succeeds. The `environment: prod`
+  # Stage 2: Prod — only runs on main, after Build succeeds. The `environment: prod`
   # deployment job is where Azure DevOps enforces the manual approval gate configured
   # on that Environment (Pipelines > Environments > prod > Approvals and checks) —
   # the run pauses there until an approver clicks Approve.
   # ---------------------------------------------------------------------------------
   - stage: Prod
     displayName: 'Prod - Deploy to BigRock'
-    dependsOn: Dev
+    dependsOn: Build
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - deployment: DeployToBigRock
@@ -191,9 +195,11 @@ stages:
 #    kebab menu (⋮) > Approvals and checks > + > Approvals > add yourself/your approver >
 #    Create. This is what makes the Prod stage pause for review before it deploys.
 #
-# 3. First run — Pipelines > New pipeline > Azure Repos Git > RealEstateAPI >
-#    "Existing Azure Pipelines YAML file" > /azure-pipelines.yml. The first run will
-#    prompt to grant the pipeline access to the variable group — approve that once.
+# 3. First run — in the RealEstateAPI project: Pipelines > New pipeline > Azure Repos Git >
+#    RealEstateAPI > "Existing Azure Pipelines YAML file" > /azure-pipelines.yml. The first
+#    run will prompt to grant the pipeline access to the variable group — approve that once.
+#    (The separate Dev-RealEstateAPI project/repo uses azure-pipelines.dev.yml instead — see
+#    that file. It has no deploy stage and no access to this project's secrets or approval gate.)
 #
 # 4. IMPORTANT — confirm before relying on this: this API has never been deployed to
 #    that BigRock virtual directory before. IIS there needs the ASP.NET Core Module
@@ -204,4 +210,28 @@ stages:
 #    panel before the first real Prod run. Publishing self-contained (as this pipeline
 #    does) at least removes "does the server have the .NET 10 runtime installed" as
 #    a variable — ANCM is still required.
+#
+# ---------------------------------------------------------------------------------
+# Two-repo workflow (day-to-day dev vs. promoting to prod)
+#
+# There is one local clone with two remotes:
+#   origin  -> Dev-RealEstateAPI   (day-to-day work; plain `git push` goes here)
+#   prod    -> RealEstateAPI       (this file's pipeline; only touched when promoting)
+#
+# Both remotes share the same commit history, so "promoting" is just pushing the same
+# commits to the second remote — no PR or merge between repos needed.
+#
+#   Day to day:
+#     git push                         # pushes to origin/main (Dev-RealEstateAPI) ->
+#                                       # triggers azure-pipelines.dev.yml (build+test only)
+#
+#   See what's on Dev but not yet promoted to Prod:
+#     git fetch --all
+#     git log prod/main..origin/main --oneline     # commits ready to promote
+#     git diff prod/main..origin/main               # the actual code diff
+#
+#   Promote everything currently on Dev's main to Prod:
+#     git push prod main:main          # triggers this file's pipeline in RealEstateAPI ->
+#                                       # Build stage re-validates, then Prod stage waits
+#                                       # for your approval before FTP-deploying to BigRock
 # ---------------------------------------------------------------------------------

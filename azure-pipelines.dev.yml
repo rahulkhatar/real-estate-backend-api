@@ -1,0 +1,62 @@
+# Pipeline for the Dev-RealEstateAPI project — day-to-day fast feedback. Runs on every push
+# here. Build + test only: no deploy stage, no FTP credentials, no access to the prod variable
+# group or approval gate (those live in the separate RealEstateAPI project). This project and
+# the RealEstateAPI project are two remotes of the same local repo (`origin` = here, `prod` =
+# RealEstateAPI) — see the promotion notes at the bottom of azure-pipelines.yml for how changes
+# move from here to Prod.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: apiProject
+    value: 'RealEstate.Api/RealEstate.Api.csproj'
+  - name: testProject
+    value: 'RealEstate.Tests/RealEstate.Tests.csproj'
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Install .NET 10 SDK'
+    inputs:
+      packageType: 'sdk'
+      version: '10.0.x'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'dotnet restore'
+    inputs:
+      command: 'restore'
+      projects: '$(apiProject)'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'dotnet build'
+    inputs:
+      command: 'build'
+      projects: '$(apiProject)'
+      arguments: '--configuration $(buildConfiguration) --no-restore'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'dotnet test'
+    inputs:
+      command: 'test'
+      projects: '$(testProject)'
+      arguments: '--configuration $(buildConfiguration) --logger trx --results-directory $(Agent.TempDirectory)/testresults'
+
+  - task: PublishTestResults@2
+    displayName: 'Publish test results'
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: '**/*.trx'
+      searchFolder: '$(Agent.TempDirectory)/testresults'
