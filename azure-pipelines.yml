@@ -85,18 +85,23 @@ stages:
               searchFolder: '$(Agent.TempDirectory)'
 
           - task: DotNetCoreCLI@2
-            displayName: 'dotnet publish (self-contained win-x64)'
+            displayName: 'dotnet publish (framework-dependent, no apphost)'
             inputs:
               command: 'publish'
               publishWebProjects: false
               projects: '$(apiProject)'
               arguments: >
                 --configuration $(buildConfiguration)
-                --runtime win-x64
-                --self-contained true
+                -p:UseAppHost=false
                 --output $(Build.ArtifactStagingDirectory)/publish
               zipAfterPublish: false
               modifyOutputPath: false
+              # Framework-dependent (relies on the .NET 10 runtime already being installed on
+              # the BigRock server -- confirmed, since other .NET apps already run there) and
+              # UseAppHost=false so no project-specific .exe is generated at all: web.config's
+              # processPath becomes "dotnet" with the dll as an argument, IIS just runs the
+              # shared dotnet.exe. Cuts the publish output from ~386 files (self-contained) to
+              # ~55, and was the fix for a "550 Access is denied" FTP error on the .exe file.
 
           - publish: '$(Build.ArtifactStagingDirectory)/publish'
             displayName: 'Publish build artifact'
@@ -205,23 +210,24 @@ stages:
 #
 # 3. Pipeline source — in the RealEstateAPI project: Pipelines > [this pipeline] > Edit > the
 #    YAML source is set to the Dev-RealEstateAPI repo's /azure-pipelines.yml on branch `main`
-#    (a cross-project repository reference — the RealEstateAPI project's build service identity
-#    needs Reader access on the Dev-RealEstateAPI repo for this to work; see Project Settings >
-#    Repositories > Dev-RealEstateAPI > Security in the Dev-RealEstateAPI project). The first
-#    run will also prompt to grant the pipeline access to the variable group — approve that once.
+#    (a cross-project repository reference). This needs the RealEstateAPI project's build
+#    service identity ("RealEstateAPI Build Service") to have read access on Dev-RealEstateAPI
+#    -- the per-repo Security tab kept rejecting the identity via the API, what actually worked
+#    was: Dev-RealEstateAPI project > Project Settings > Permissions > Readers group > Members
+#    > add "RealEstateAPI Build Service". The first pipeline run will also prompt to grant
+#    access to the variable group — approve that once.
 #    (The Dev-RealEstateAPI project has its own separate pipeline, using azure-pipelines.dev.yml
 #    — see that file. It has no deploy stage and no access to this project's secrets or approval
 #    gate.)
 #
-# 4. IMPORTANT — confirm before relying on this: this API has never been deployed to
-#    that BigRock virtual directory before. IIS there needs the ASP.NET Core Module
-#    (ANCM v2) installed and the target folder configured as an IIS Application (not
-#    just a plain virtual directory) with its app pool set to "No Managed Code" —
-#    otherwise requests to the deployed app will 404/500 regardless of what the
-#    pipeline uploads. Worth confirming with BigRock support or in their Plesk/IIS
-#    panel before the first real Prod run. Publishing self-contained (as this pipeline
-#    does) at least removes "does the server have the .NET 10 runtime installed" as
-#    a variable — ANCM is still required.
+# 4. This is a framework-dependent deploy: relies on the .NET 10 runtime + ANCM v2 already
+#    being installed on the BigRock server (other .NET apps already run there, so this is a
+#    reasonable bet) with the target folder set up as an IIS Application (not just a plain
+#    virtual directory), app pool "No Managed Code". If FTP uploads fail partway through with
+#    repeated "ECONNRESET (data socket)" errors, that's passive-FTP-behind-NAT, not a pipeline
+#    bug -- needs "External IP Address of Firewall" and a passive port range configured on the
+#    server's FTP service (BigRock support if you don't have that level of access), with that
+#    port range open in the firewall.
 #
 # ---------------------------------------------------------------------------------
 # Branch flow (everything lives in the Dev-RealEstateAPI repo; RealEstateAPI is a pipeline-only
