@@ -1,0 +1,137 @@
+name: Deploy to BigRock
+
+# Runs on every push to main (i.e. every dev -> main PR merge). The `build` job re-validates
+# (build + test) and publishes framework-dependent (no project .exe -- see the publish step
+# below for why). The `deploy` job targets the `prod` Environment, which is where GitHub
+# enforces the manual approval gate (Settings > Environments > prod > Required reviewers) --
+# the run pauses there until an approver clicks Approve, then FTP-uploads to BigRock.
+#
+# One-time setup required before this goes green -- see the checklist at the bottom of this file.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: dotnet restore
+        run: dotnet restore RealEstate.Api/RealEstate.Api.csproj
+
+      - name: dotnet build
+        run: dotnet build RealEstate.Api/RealEstate.Api.csproj --configuration Release --no-restore
+
+      - name: dotnet test
+        run: dotnet test RealEstate.Tests/RealEstate.Tests.csproj --configuration Release
+
+      - name: dotnet publish (framework-dependent, no apphost)
+        # Framework-dependent (the BigRock server already has the .NET 10 runtime + ANCM v2 --
+        # other .NET apps run there) with UseAppHost=false so no project-specific .exe is
+        # generated at all: web.config's processPath becomes "dotnet" with the dll as an
+        # argument. A self-contained build (with its own .exe) is what caused a 550 FTP error
+        # and repeated connection resets on the first real deploy attempt.
+        run: dotnet publish RealEstate.Api/RealEstate.Api.csproj --configuration Release -p:UseAppHost=false --output publish
+
+      - name: Enable ANCM stdout logging for startup-failure debugging
+        shell: pwsh
+        run: |
+          $webConfigPath = "publish/web.config"
+          (Get-Content -Raw -Path $webConfigPath) -replace 'stdoutLogEnabled="false"', 'stdoutLogEnabled="true"' |
+            Set-Content -Path $webConfigPath -NoNewline
+
+          # ANCM writes stdout logs into .\logs\ but never creates the directory itself --
+          # without this, a startup crash produces no log file at all to diagnose from.
+          New-Item -ItemType Directory -Force -Path "publish/logs" | Out-Null
+          Set-Content -Path "publish/logs/.keep" -Value "placeholder so the FTP upload creates this directory"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-publish
+          path: publish/
+          retention-days: 5
+
+  deploy:
+    name: FTP deploy to BigRock
+    needs: build
+    runs-on: windows-latest
+    environment: prod
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: api-publish
+          path: publish
+
+      - name: Generate appsettings.Production.json from secrets
+        shell: pwsh
+        run: |
+          $templatePath = "publish/appsettings.Production.template.json"
+          $template = Get-Content -Raw -Path $templatePath
+
+          $replacements = @{
+            '#{MongoConnectionString}#'       = '${{ secrets.MONGO_CONNECTION_STRING }}'
+            '#{MongoDatabaseName}#'           = '${{ secrets.MONGO_DATABASE_NAME }}'
+            '#{JwtSecret}#'                   = '${{ secrets.JWT_SECRET }}'
+            '#{CorsAllowedOrigin}#'           = '${{ secrets.CORS_ALLOWED_ORIGIN }}'
+            '#{CloudflareR2AccountId}#'       = '${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}'
+            '#{CloudflareR2AccessKeyId}#'     = '${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}'
+            '#{CloudflareR2SecretAccessKey}#' = '${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}'
+            '#{CloudflareR2BucketName}#'      = '${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}'
+            '#{CloudflareR2PublicBaseUrl}#'   = '${{ secrets.CLOUDFLARE_R2_PUBLIC_BASE_URL }}'
+            '#{OpenAiApiKey}#'                = '${{ secrets.OPENAI_API_KEY }}'
+            '#{AdminEmail}#'                  = '${{ secrets.ADMIN_EMAIL }}'
+            '#{AdminPassword}#'               = '${{ secrets.ADMIN_PASSWORD }}'
+            '#{AdminName}#'                   = '${{ secrets.ADMIN_NAME }}'
+          }
+
+          foreach ($key in $replacements.Keys) {
+            $template = $template.Replace($key, $replacements[$key])
+          }
+
+          Set-Content -Path "publish/appsettings.Production.json" -Value $template -NoNewline
+          Remove-Item $templatePath
+
+      - name: FTP upload to BigRock
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./publish/
+          server-dir: ${{ secrets.FTP_REMOTE_DIRECTORY }}
+          dangerous-clean-slate: true
+          # dangerous-clean-slate wipes the remote directory before uploading -- this is what
+          # fixed a "550 Access is denied" error caused by a stale .exe left over from an
+          # earlier failed deploy attempt still sitting on the server.
+
+# ---------------------------------------------------------------------------------
+# One-time setup on GitHub before this workflow will run green:
+#
+# 1. Environment secrets -- Settings > Environments > prod > Environment secrets > Add secret,
+#    for each of: FTP_SERVER (hostname/IP only, no scheme -- e.g. 162.222.225.80),
+#    FTP_USERNAME, FTP_PASSWORD, FTP_REMOTE_DIRECTORY (must end with / , e.g. /real-estate-api/),
+#    MONGO_CONNECTION_STRING, MONGO_DATABASE_NAME, JWT_SECRET (generate a new one, don't reuse
+#    dev's), CORS_ALLOWED_ORIGIN (https://cognition-research.in), CLOUDFLARE_R2_ACCOUNT_ID,
+#    CLOUDFLARE_R2_ACCESS_KEY_ID, CLOUDFLARE_R2_SECRET_ACCESS_KEY, CLOUDFLARE_R2_BUCKET_NAME,
+#    CLOUDFLARE_R2_PUBLIC_BASE_URL, OPENAI_API_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME.
+#    GitHub secrets are write-only once saved (you can update but never view them again) --
+#    never paste real values into this YAML file or into chat.
+#
+# 2. Required reviewers -- Settings > Environments > prod > Deployment protection rules >
+#    Required reviewers > add yourself. This is what makes the deploy job pause for review.
+#
+# 3. protocol: ftps above assumes explicit FTPS -- if the connection fails, try switching to
+#    plain `ftp` (less secure, but this is the same BigRock server the frontend/API already
+#    connect to, so whatever worked there should work here too).
+# ---------------------------------------------------------------------------------

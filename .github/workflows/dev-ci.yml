@@ -1,0 +1,32 @@
+name: Dev CI
+
+# Build + test only, no deploy. Runs on every push to dev and every PR targeting dev or main --
+# this is the "automated review" gate: green means safe to merge, red blocks it via branch
+# protection (Settings > Branches > require this check to pass before merging).
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  build-and-test:
+    name: Build & test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: dotnet restore
+        run: dotnet restore RealEstate.Api/RealEstate.Api.csproj
+
+      - name: dotnet build
+        run: dotnet build RealEstate.Api/RealEstate.Api.csproj --configuration Release --no-restore
+
+      - name: dotnet test
+        run: dotnet test RealEstate.Tests/RealEstate.Tests.csproj --configuration Release
