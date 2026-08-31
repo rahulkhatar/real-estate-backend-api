@@ -1,0 +1,207 @@
+# Two-stage pipeline: Dev (build + test, runs on every push/PR) and Prod (FTP deploy to
+# BigRock, runs only on main and only after manual approval on the "prod" Environment).
+#
+# One-time setup required in the Azure DevOps portal before this pipeline will run green —
+# see the checklist at the bottom of this file.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: BigRock-Prod-Secrets
+  - name: buildConfiguration
+    value: 'Release'
+  - name: apiProject
+    value: 'RealEstate.Api/RealEstate.Api.csproj'
+  - name: testProject
+    value: 'RealEstate.Tests/RealEstate.Tests.csproj'
+
+stages:
+  # ---------------------------------------------------------------------------------
+  # Stage 1: Dev — restore, build, run the test suite, publish a self-contained
+  # win-x64 build as a pipeline artifact. Runs on every push and PR into main.
+  # Nothing is deployed here — this is the "is it safe to promote" gate.
+  # ---------------------------------------------------------------------------------
+  - stage: Dev
+    displayName: 'Dev - Build & Test'
+    jobs:
+      - job: BuildAndTest
+        displayName: 'Build & test'
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Install .NET 10 SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '10.0.x'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'dotnet restore'
+            inputs:
+              command: 'restore'
+              projects: '$(apiProject)'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'dotnet build'
+            inputs:
+              command: 'build'
+              projects: '$(apiProject)'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'dotnet test'
+            inputs:
+              command: 'test'
+              projects: '$(testProject)'
+              arguments: '--configuration $(buildConfiguration) --logger trx --results-directory $(Agent.TempDirectory)/testresults'
+
+          - task: PublishTestResults@2
+            displayName: 'Publish test results'
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'VSTest'
+              testResultsFiles: '**/*.trx'
+              searchFolder: '$(Agent.TempDirectory)/testresults'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'dotnet publish (self-contained win-x64)'
+            inputs:
+              command: 'publish'
+              publishWebProjects: false
+              projects: '$(apiProject)'
+              arguments: >
+                --configuration $(buildConfiguration)
+                --runtime win-x64
+                --self-contained true
+                --output $(Build.ArtifactStagingDirectory)/publish
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - publish: '$(Build.ArtifactStagingDirectory)/publish'
+            displayName: 'Publish build artifact'
+            artifact: api-publish
+
+  # ---------------------------------------------------------------------------------
+  # Stage 2: Prod — only runs on main, after Dev succeeds. The `environment: prod`
+  # deployment job is where Azure DevOps enforces the manual approval gate configured
+  # on that Environment (Pipelines > Environments > prod > Approvals and checks) —
+  # the run pauses there until an approver clicks Approve.
+  # ---------------------------------------------------------------------------------
+  - stage: Prod
+    displayName: 'Prod - Deploy to BigRock'
+    dependsOn: Dev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToBigRock
+        displayName: 'FTP deploy to cognition-research.in/real-estate-api'
+        environment: 'prod'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download published build'
+                  inputs:
+                    artifact: api-publish
+                    path: '$(Pipeline.Workspace)/api-publish'
+
+                - task: PowerShell@2
+                  displayName: 'Generate appsettings.Production.json from secrets'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $templatePath = '$(Pipeline.Workspace)/api-publish/appsettings.Production.template.json'
+                      $template = Get-Content -Raw -Path $templatePath
+
+                      $replacements = @{
+                        '#{MongoConnectionString}#'       = '$(MongoConnectionStringProd)'
+                        '#{MongoDatabaseName}#'           = '$(MongoDatabaseNameProd)'
+                        '#{JwtSecret}#'                   = '$(JwtSecretProd)'
+                        '#{CorsAllowedOrigin}#'           = '$(CorsAllowedOriginProd)'
+                        '#{CloudflareR2AccountId}#'       = '$(CloudflareR2AccountId)'
+                        '#{CloudflareR2AccessKeyId}#'     = '$(CloudflareR2AccessKeyId)'
+                        '#{CloudflareR2SecretAccessKey}#' = '$(CloudflareR2SecretAccessKey)'
+                        '#{CloudflareR2BucketName}#'      = '$(CloudflareR2BucketName)'
+                        '#{CloudflareR2PublicBaseUrl}#'   = '$(CloudflareR2PublicBaseUrl)'
+                        '#{OpenAiApiKey}#'                = '$(OpenAiApiKey)'
+                        '#{AdminEmail}#'                  = '$(AdminEmail)'
+                        '#{AdminPassword}#'               = '$(AdminPassword)'
+                        '#{AdminName}#'                   = '$(AdminName)'
+                      }
+
+                      foreach ($key in $replacements.Keys) {
+                        $template = $template.Replace($key, $replacements[$key])
+                      }
+
+                      Set-Content -Path '$(Pipeline.Workspace)/api-publish/appsettings.Production.json' -Value $template -NoNewline
+                      Remove-Item $templatePath
+
+                - task: FtpUpload@2
+                  displayName: 'FTP upload to BigRock'
+                  inputs:
+                    credentialsOption: 'inputs'
+                    serverUrl: '$(FtpServerUrl)'
+                    username: '$(FtpUsername)'
+                    password: '$(FtpPassword)'
+                    rootDirectory: '$(Pipeline.Workspace)/api-publish'
+                    filePatterns: '**'
+                    remoteDirectory: '$(FtpRemoteDirectory)'
+                    clean: false
+                    cleanContents: false
+                    preservePaths: true
+                    trustSSL: true
+
+# ---------------------------------------------------------------------------------
+# One-time setup in the Azure DevOps portal (this file alone is not enough to go green):
+#
+# 1. Variable group — Pipelines > Library > + Variable group, name it exactly
+#    "BigRock-Prod-Secrets" (must match the `group:` name above), then add these
+#    variables. Click the padlock icon on every secret one so its value is masked
+#    in logs — never paste real values into this YAML file or into chat.
+#      FtpServerUrl                  e.g. ftp://ftp.cognition-research.in (or ftps://...)
+#      FtpUsername                   (secret)
+#      FtpPassword                   (secret)
+#      FtpRemoteDirectory            the server-side path that maps to
+#                                     cognition-research.in/real-estate-api
+#      MongoConnectionStringProd     (secret) — ideally a separate prod DB from RealEstateDb_Dev
+#      MongoDatabaseNameProd         e.g. RealEstateDb
+#      JwtSecretProd                 (secret) — generate a new random secret, don't reuse dev's
+#      CorsAllowedOriginProd         https://cognition-research.in
+#      CloudflareR2AccountId
+#      CloudflareR2AccessKeyId       (secret)
+#      CloudflareR2SecretAccessKey   (secret)
+#      CloudflareR2BucketName
+#      CloudflareR2PublicBaseUrl
+#      OpenAiApiKey                  (secret)
+#      AdminEmail
+#      AdminPassword                 (secret) — a new strong password, not the dev one
+#      AdminName
+#
+# 2. Environment approval — Pipelines > Environments > New environment, name it exactly
+#    "prod" (must match `environment: prod` above), skip resource linking. Then open it >
+#    kebab menu (⋮) > Approvals and checks > + > Approvals > add yourself/your approver >
+#    Create. This is what makes the Prod stage pause for review before it deploys.
+#
+# 3. First run — Pipelines > New pipeline > Azure Repos Git > RealEstateAPI >
+#    "Existing Azure Pipelines YAML file" > /azure-pipelines.yml. The first run will
+#    prompt to grant the pipeline access to the variable group — approve that once.
+#
+# 4. IMPORTANT — confirm before relying on this: this API has never been deployed to
+#    that BigRock virtual directory before. IIS there needs the ASP.NET Core Module
+#    (ANCM v2) installed and the target folder configured as an IIS Application (not
+#    just a plain virtual directory) with its app pool set to "No Managed Code" —
+#    otherwise requests to the deployed app will 404/500 regardless of what the
+#    pipeline uploads. Worth confirming with BigRock support or in their Plesk/IIS
+#    panel before the first real Prod run. Publishing self-contained (as this pipeline
+#    does) at least removes "does the server have the .NET 10 runtime installed" as
+#    a variable — ANCM is still required.
+# ---------------------------------------------------------------------------------
