@@ -23,12 +23,4 @@
     <ProjectReference Include="..\RealEstate.Infrastructure\RealEstate.Infrastructure.csproj" />
   </ItemGroup>
 
-  <!-- appsettings.Production.template.json (placeholder-only, no real secrets) is already
-       picked up and copied to the publish output automatically by the Web SDK's default
-       "appsettings.*.json" content glob, so an explicit Content Include here double-includes
-       it and fails the build with NETSDK1022 (duplicate Content items). The Prod pipeline
-       stage fills in the #{Token}# placeholders from Azure DevOps secret variables and writes
-       appsettings.Production.json before FTP-uploading, so real secrets never touch source
-       control. -->
-
 </Project>
