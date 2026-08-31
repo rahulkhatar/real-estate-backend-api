@@ -51,7 +51,11 @@ steps:
     inputs:
       command: 'test'
       projects: '$(testProject)'
-      arguments: '--configuration $(buildConfiguration) --logger trx --results-directory $(Agent.TempDirectory)/testresults'
+      arguments: '--configuration $(buildConfiguration)'
+      # publishTestResults defaults to true, which already appends its own
+      # --logger trx --results-directory $(Agent.TempDirectory) -- adding those
+      # manually here duplicates the flags and breaks the dotnet CLI's argument
+      # parsing (caught by the first real run on the self-hosted agent).
 
   - task: PublishTestResults@2
     displayName: 'Publish test results'
@@ -59,4 +63,4 @@ steps:
     inputs:
       testResultsFormat: 'VSTest'
       testResultsFiles: '**/*.trx'
-      searchFolder: '$(Agent.TempDirectory)/testresults'
+      searchFolder: '$(Agent.TempDirectory)'
