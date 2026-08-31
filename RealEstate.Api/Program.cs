@@ -11,6 +11,8 @@ using RealEstate.Infrastructure;
 using RealEstate.Infrastructure.Persistence;
 using Serilog;
 
+// Entry point for the API host -- deployed to BigRock via the RealEstateAPI project's
+// pipeline, triggered by pushes to this repo's main branch (see azure-pipelines.yml).
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog((context, configuration) =>

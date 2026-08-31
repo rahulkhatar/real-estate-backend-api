@@ -1,18 +1,22 @@
-# Pipeline for the Dev-RealEstateAPI project — day-to-day fast feedback. Runs on every push
-# here. Build + test only: no deploy stage, no FTP credentials, no access to the prod variable
-# group or approval gate (those live in the separate RealEstateAPI project). This project and
-# the RealEstateAPI project are two remotes of the same local repo (`origin` = here, `prod` =
-# RealEstateAPI) — see the promotion notes at the bottom of azure-pipelines.yml for how changes
-# move from here to Prod.
+# Pipeline for the Dev-RealEstateAPI project — day-to-day fast feedback. Build + test only: no
+# deploy stage, no FTP credentials, no access to the prod variable group or approval gate (those
+# live in the separate RealEstateAPI project, whose pipeline is sourced directly from this repo's
+# `main` branch — see the branch-flow notes at the bottom of azure-pipelines.yml).
+#
+# Branch flow: feature/* branches PR into `dev` (this pipeline runs as that PR's required build
+# validation check, and again on the resulting push to `dev`) -- when ready to release, `dev` PRs
+# into `main` (this pipeline validates that PR too; landing on `main` is what triggers the Prod
+# pipeline in the RealEstateAPI project).
 
 trigger:
   branches:
     include:
-      - main
+      - dev
 
 pr:
   branches:
     include:
+      - dev
       - main
 
 pool:
