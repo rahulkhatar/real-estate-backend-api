@@ -100,6 +100,10 @@ app.UseHttpsRedirection();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Unauthenticated liveness probe for the Docker HEALTHCHECK / container orchestrator.
+app.MapGet("/health", () => Results.Ok("healthy"));
+
 app.MapControllers();
 
 app.Run();
