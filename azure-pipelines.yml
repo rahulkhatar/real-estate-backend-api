@@ -125,6 +125,20 @@ stages:
           runOnce:
             deploy:
               steps:
+                - task: PowerShell@2
+                  displayName: 'Clean stale artifact folder (self-hosted agents reuse their working directory)'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $path = '$(Pipeline.Workspace)/api-publish'
+                      if (Test-Path $path) {
+                        Remove-Item -Path $path -Recurse -Force
+                      }
+                      # DownloadPipelineArtifact only adds files -- on a self-hosted agent the
+                      # working directory persists across runs, so without this a prior run's
+                      # files (e.g. the old self-contained build's .exe) stick around and get
+                      # FTP-uploaded alongside the current run's output.
+
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download published build'
                   inputs:
@@ -173,9 +187,13 @@ stages:
                     filePatterns: '**'
                     remoteDirectory: '$(FtpRemoteDirectory)'
                     clean: false
-                    cleanContents: false
+                    cleanContents: true
                     preservePaths: true
                     trustSSL: true
+                    # cleanContents wipes stale files out of the remote directory before
+                    # uploading -- needed once to clear out the old self-contained build's
+                    # files (RealEstate.Api.exe etc.) still sitting there from the first,
+                    # failed deploy attempt, and keeps future deploys from accumulating cruft.
 
 # ---------------------------------------------------------------------------------
 # One-time setup in the Azure DevOps portal (this file alone is not enough to go green):
