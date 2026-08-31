@@ -176,6 +176,21 @@ stages:
                       Set-Content -Path '$(Pipeline.Workspace)/api-publish/appsettings.Production.json' -Value $template -NoNewline
                       Remove-Item $templatePath
 
+                - task: PowerShell@2
+                  displayName: 'Enable ANCM stdout logging for startup-failure debugging'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $webConfigPath = '$(Pipeline.Workspace)/api-publish/web.config'
+                      (Get-Content -Raw -Path $webConfigPath) -replace 'stdoutLogEnabled="false"', 'stdoutLogEnabled="true"' |
+                        Set-Content -Path $webConfigPath -NoNewline
+
+                      # ANCM writes stdout logs into .\logs\ but never creates the directory itself --
+                      # without this, a startup crash produces no log file at all to diagnose from.
+                      $logsDir = '$(Pipeline.Workspace)/api-publish/logs'
+                      New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+                      Set-Content -Path (Join-Path $logsDir '.keep') -Value 'placeholder so FTP upload creates this directory'
+
                 - task: FtpUpload@2
                   displayName: 'FTP upload to BigRock'
                   inputs:
