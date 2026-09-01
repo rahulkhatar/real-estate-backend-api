@@ -1,13 +1,17 @@
 using AutoMapper;
 using MediatR;
 using RealEstate.Application.Common;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Application.Features.Properties.Specifications;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Properties.Queries;
 
-public record GetAllPropertiesQuery(PropertyQueryParams Query) : IRequest<PagedResponse<PropertyDto>>;
+public record GetAllPropertiesQuery(PropertyQueryParams Query) : IRequest<PagedResponse<PropertyDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Property;
+}
 
 public class GetAllPropertiesQueryHandler(IPropertyRepository repository, IMapper mapper)
     : IRequestHandler<GetAllPropertiesQuery, PagedResponse<PropertyDto>>
@@ -21,7 +25,10 @@ public class GetAllPropertiesQueryHandler(IPropertyRepository repository, IMappe
     }
 }
 
-public record GetPropertiesByProjectQuery(string ProjectId) : IRequest<List<PropertyDto>>;
+public record GetPropertiesByProjectQuery(string ProjectId) : IRequest<List<PropertyDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Property;
+}
 
 public class GetPropertiesByProjectQueryHandler(IPropertyRepository repository, IMapper mapper)
     : IRequestHandler<GetPropertiesByProjectQuery, List<PropertyDto>>

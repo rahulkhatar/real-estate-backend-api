@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using RealEstate.Application.Common.Mappings;
 using RealEstate.Application.Features.Units.Commands;
+using RealEstate.Application.Interfaces;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Enums;
 using RealEstate.Core.Interfaces;
@@ -17,6 +18,7 @@ public class UpdateUnitStatusCommandHandlerTests
     private readonly Mock<IPropertyRepository> _propertyRepo = new();
     private readonly Mock<IProjectRepository> _projectRepo = new();
     private readonly Mock<IListingEmbeddingRepository> _embeddingRepo = new();
+    private readonly Mock<ICacheService> _cache = new();
     private readonly Mock<ILogger<UpdateUnitStatusCommandHandler>> _logger = new();
     private readonly IMapper _mapper;
 
@@ -27,7 +29,7 @@ public class UpdateUnitStatusCommandHandlerTests
     }
 
     private UpdateUnitStatusCommandHandler CreateHandler() =>
-        new(_unitRepo.Object, _propertyRepo.Object, _projectRepo.Object, _embeddingRepo.Object, _logger.Object, _mapper);
+        new(_unitRepo.Object, _propertyRepo.Object, _projectRepo.Object, _embeddingRepo.Object, _cache.Object, _logger.Object, _mapper);
 
     [Fact]
     public async Task Handle_LastUnitSold_MarksPropertyAndProjectSold()

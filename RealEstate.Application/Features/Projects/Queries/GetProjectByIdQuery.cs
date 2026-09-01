@@ -1,12 +1,16 @@
 using AutoMapper;
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Projects.Queries;
 
-public record GetProjectByIdQuery(string Id) : IRequest<ProjectDto>;
+public record GetProjectByIdQuery(string Id) : IRequest<ProjectDto>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Project;
+}
 
 public class GetProjectByIdQueryHandler(IProjectRepository repository, IMapper mapper)
     : IRequestHandler<GetProjectByIdQuery, ProjectDto>

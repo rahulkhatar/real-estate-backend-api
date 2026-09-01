@@ -1,6 +1,7 @@
 using AutoMapper;
 using FluentValidation;
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Exceptions;
@@ -9,7 +10,10 @@ using RealEstate.Core.ValueObjects;
 
 namespace RealEstate.Application.Features.UnitLayouts.Commands;
 
-public record CreateUnitLayoutCommand(CreateUnitLayoutDto Dto) : IRequest<UnitLayoutDto>;
+public record CreateUnitLayoutCommand(CreateUnitLayoutDto Dto) : IRequest<UnitLayoutDto>, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.UnitLayout];
+}
 
 public class CreateUnitLayoutCommandValidator : AbstractValidator<CreateUnitLayoutCommand>
 {
@@ -40,7 +44,10 @@ public class CreateUnitLayoutCommandHandler(
     }
 }
 
-public record UpdateUnitLayoutCommand(string Id, UpdateUnitLayoutDto Dto) : IRequest<UnitLayoutDto>;
+public record UpdateUnitLayoutCommand(string Id, UpdateUnitLayoutDto Dto) : IRequest<UnitLayoutDto>, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.UnitLayout];
+}
 
 public class UpdateUnitLayoutCommandValidator : AbstractValidator<UpdateUnitLayoutCommand>
 {
@@ -65,7 +72,10 @@ public class UpdateUnitLayoutCommandHandler(IUnitLayoutRepository repository, IM
     }
 }
 
-public record DeleteUnitLayoutCommand(string Id) : IRequest;
+public record DeleteUnitLayoutCommand(string Id) : IRequest, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.UnitLayout];
+}
 
 public class DeleteUnitLayoutCommandHandler(IUnitLayoutRepository repository) : IRequestHandler<DeleteUnitLayoutCommand>
 {

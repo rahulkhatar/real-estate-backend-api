@@ -1,12 +1,16 @@
 using AutoMapper;
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Properties.Queries;
 
-public record GetPropertyByIdQuery(string Id) : IRequest<PropertyDto>;
+public record GetPropertyByIdQuery(string Id) : IRequest<PropertyDto>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Property;
+}
 
 public class GetPropertyByIdQueryHandler(IPropertyRepository repository, IMapper mapper)
     : IRequestHandler<GetPropertyByIdQuery, PropertyDto>

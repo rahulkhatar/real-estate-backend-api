@@ -1,6 +1,7 @@
 using AutoMapper;
 using FluentValidation;
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Exceptions;
@@ -9,7 +10,11 @@ using RealEstate.Core.ValueObjects;
 
 namespace RealEstate.Application.Features.Properties.Commands;
 
-public record CreatePropertyCommand(CreatePropertyDto Dto) : IRequest<PropertyDto>;
+public record CreatePropertyCommand(CreatePropertyDto Dto) : IRequest<PropertyDto>, IInvalidatesCache
+{
+    // Also bumps Project: this create denormalizes/updates the parent project's TotalProperties.
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Property, CacheEntityType.Project];
+}
 
 public class CreatePropertyCommandValidator : AbstractValidator<CreatePropertyCommand>
 {

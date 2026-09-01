@@ -1,5 +1,5 @@
-using MediatR;
 using Microsoft.Extensions.Logging;
+using RealEstate.Application.Interfaces;
 
 namespace RealEstate.Application.Features.Chat.Commands;
 
@@ -7,7 +7,7 @@ internal static class EmbeddingReindexHelper
 {
     public static async Task ReindexUnitsAsync(
         IReadOnlyList<Core.Entities.Unit> units,
-        IMediator mediator,
+        IUnitReindexPublisher reindexPublisher,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -15,11 +15,11 @@ internal static class EmbeddingReindexHelper
         {
             try
             {
-                await mediator.Send(new IndexUnitEmbeddingCommand(unit.Id), cancellationToken);
+                await reindexPublisher.PublishAsync(unit.Id, cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to re-index unit {UnitId} for the AI chat assistant.", unit.Id);
+                logger.LogWarning(ex, "Failed to queue re-index for unit {UnitId} for the AI chat assistant.", unit.Id);
             }
         }
     }

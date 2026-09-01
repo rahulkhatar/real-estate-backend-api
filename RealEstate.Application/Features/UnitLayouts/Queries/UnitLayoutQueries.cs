@@ -1,5 +1,6 @@
 using AutoMapper;
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Exceptions;
@@ -7,7 +8,10 @@ using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.UnitLayouts.Queries;
 
-public record GetUnitLayoutByIdQuery(string Id) : IRequest<UnitLayoutDto>;
+public record GetUnitLayoutByIdQuery(string Id) : IRequest<UnitLayoutDto>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.UnitLayout;
+}
 
 public class GetUnitLayoutByIdQueryHandler(IUnitLayoutRepository repository, IMapper mapper)
     : IRequestHandler<GetUnitLayoutByIdQuery, UnitLayoutDto>
@@ -21,7 +25,10 @@ public class GetUnitLayoutByIdQueryHandler(IUnitLayoutRepository repository, IMa
     }
 }
 
-public record GetLayoutsByUnitQuery(string UnitId) : IRequest<List<UnitLayoutDto>>;
+public record GetLayoutsByUnitQuery(string UnitId) : IRequest<List<UnitLayoutDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.UnitLayout;
+}
 
 public class GetLayoutsByUnitQueryHandler(IUnitLayoutRepository repository, IMapper mapper)
     : IRequestHandler<GetLayoutsByUnitQuery, List<UnitLayoutDto>>
@@ -33,7 +40,10 @@ public class GetLayoutsByUnitQueryHandler(IUnitLayoutRepository repository, IMap
     }
 }
 
-public record GetAllUnitLayoutsQuery : IRequest<List<UnitLayoutDto>>;
+public record GetAllUnitLayoutsQuery : IRequest<List<UnitLayoutDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.UnitLayout;
+}
 
 public class GetAllUnitLayoutsQueryHandler(IUnitLayoutRepository repository, IMapper mapper)
     : IRequestHandler<GetAllUnitLayoutsQuery, List<UnitLayoutDto>>

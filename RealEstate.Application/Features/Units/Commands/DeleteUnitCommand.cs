@@ -1,11 +1,16 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Units.Commands;
 
-public record DeleteUnitCommand(string Id) : IRequest;
+public record DeleteUnitCommand(string Id) : IRequest, IInvalidatesCache
+{
+    // Also bumps Property: deletion decrements the parent property's TotalUnits.
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Unit, CacheEntityType.Property];
+}
 
 public class DeleteUnitCommandHandler(
     IUnitRepository repository,
