@@ -96,7 +96,15 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 
-app.UseHttpsRedirection();
+// Skipped in containers: both docker-compose (nginx) and Azure Container Apps terminate
+// TLS outside this process and forward plain HTTP internally. Azure sets an HTTPS port
+// automatically for ingress-enabled apps, which made this middleware 301-redirect
+// internal-to-internal calls (frontend -> backend) to the backend's own internal HTTPS
+// URL -- unreachable from outside the Container Apps Environment, since that ingress is
+// internal-only. BigRock's IIS-hosted deploy (if ever reinstated) would need this back.
+if (!app.Environment.IsProduction())
+    app.UseHttpsRedirection();
+
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
