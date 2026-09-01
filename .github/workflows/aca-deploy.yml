@@ -80,5 +80,12 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
+            # --revision-suffix forces a new revision (and a real image re-pull) on every run.
+            # Without it, Azure Container Apps diffs the update request against the currently
+            # configured revision and treats an unchanged ":latest" tag string as a no-op --
+            # it reports success but never actually deploys the new image bits. Suffixing with
+            # the commit SHA + run number guarantees a unique, unused revision name every time,
+            # even for a workflow_dispatch re-run of the same commit.
             az containerapp update -n real-estate-backend -g ai-azure-ls \
-              --image ${{ env.IMAGE_NAME }}:latest
+              --image ${{ env.IMAGE_NAME }}:latest \
+              --revision-suffix sha-${GITHUB_SHA:0:7}-${{ github.run_number }}
