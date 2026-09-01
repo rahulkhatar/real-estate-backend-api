@@ -12,10 +12,10 @@
 name: Build, push, and deploy to Azure Container Apps
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+  # push: { branches: [main] } -- enabled once this is verified end-to-end via a manual
+  # workflow_dispatch run (see rollout plan); flipping this on is what actually makes
+  # merges to main auto-deploy.
 
 env:
   IMAGE_NAME: rahulk86/real-estate
