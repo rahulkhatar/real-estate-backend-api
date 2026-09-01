@@ -1,13 +1,17 @@
 using AutoMapper;
 using FluentValidation;
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Projects.Commands;
 
-public record CreateProjectCommand(CreateProjectDto Dto) : IRequest<ProjectDto>;
+public record CreateProjectCommand(CreateProjectDto Dto) : IRequest<ProjectDto>, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Project];
+}
 
 public class CreateProjectCommandValidator : AbstractValidator<CreateProjectCommand>
 {

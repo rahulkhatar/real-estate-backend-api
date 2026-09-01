@@ -1,6 +1,7 @@
 using AutoMapper;
 using MediatR;
 using RealEstate.Application.Common;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Application.Features.Units.Specifications;
 using RealEstate.Core.Exceptions;
@@ -8,7 +9,10 @@ using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Units.Queries;
 
-public record GetUnitByIdQuery(string Id) : IRequest<UnitDto>;
+public record GetUnitByIdQuery(string Id) : IRequest<UnitDto>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Unit;
+}
 
 public class GetUnitByIdQueryHandler(IUnitRepository repository, IMapper mapper)
     : IRequestHandler<GetUnitByIdQuery, UnitDto>
@@ -22,7 +26,10 @@ public class GetUnitByIdQueryHandler(IUnitRepository repository, IMapper mapper)
     }
 }
 
-public record GetAllUnitsQuery(UnitQueryParams Query) : IRequest<PagedResponse<UnitDto>>;
+public record GetAllUnitsQuery(UnitQueryParams Query) : IRequest<PagedResponse<UnitDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Unit;
+}
 
 public class GetAllUnitsQueryHandler(IUnitRepository repository, IMapper mapper)
     : IRequestHandler<GetAllUnitsQuery, PagedResponse<UnitDto>>
@@ -36,7 +43,10 @@ public class GetAllUnitsQueryHandler(IUnitRepository repository, IMapper mapper)
     }
 }
 
-public record GetUnitsByPropertyQuery(string PropertyId) : IRequest<List<UnitDto>>;
+public record GetUnitsByPropertyQuery(string PropertyId) : IRequest<List<UnitDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Unit;
+}
 
 public class GetUnitsByPropertyQueryHandler(IUnitRepository repository, IMapper mapper)
     : IRequestHandler<GetUnitsByPropertyQuery, List<UnitDto>>

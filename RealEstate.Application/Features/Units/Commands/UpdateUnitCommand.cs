@@ -2,14 +2,18 @@ using AutoMapper;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
-using RealEstate.Application.Features.Chat.Commands;
+using RealEstate.Application.Interfaces;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Units.Commands;
 
-public record UpdateUnitCommand(string Id, UpdateUnitDto Dto) : IRequest<UnitDto>;
+public record UpdateUnitCommand(string Id, UpdateUnitDto Dto) : IRequest<UnitDto>, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Unit];
+}
 
 public class UpdateUnitCommandValidator : AbstractValidator<UpdateUnitCommand>
 {
@@ -22,7 +26,7 @@ public class UpdateUnitCommandValidator : AbstractValidator<UpdateUnitCommand>
 
 public class UpdateUnitCommandHandler(
     IUnitRepository repository,
-    IMediator mediator,
+    IUnitReindexPublisher reindexPublisher,
     ILogger<UpdateUnitCommandHandler> logger,
     IMapper mapper) : IRequestHandler<UpdateUnitCommand, UnitDto>
 {
@@ -41,11 +45,11 @@ public class UpdateUnitCommandHandler(
 
         try
         {
-            await mediator.Send(new IndexUnitEmbeddingCommand(unit.Id), cancellationToken);
+            await reindexPublisher.PublishAsync(unit.Id, cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to re-index unit {UnitId} for the AI chat assistant.", unit.Id);
+            logger.LogWarning(ex, "Failed to queue re-index for unit {UnitId} for the AI chat assistant.", unit.Id);
         }
 
         return mapper.Map<UnitDto>(unit);

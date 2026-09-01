@@ -1,10 +1,14 @@
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Projects.Commands;
 
-public record DeleteProjectCommand(string Id) : IRequest;
+public record DeleteProjectCommand(string Id) : IRequest, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Project];
+}
 
 public class DeleteProjectCommandHandler(IProjectRepository repository, IPropertyRepository propertyRepository)
     : IRequestHandler<DeleteProjectCommand>
