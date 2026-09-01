@@ -2,7 +2,9 @@ using AutoMapper;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
+using RealEstate.Application.Interfaces;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Enums;
 using RealEstate.Core.Exceptions;
@@ -10,7 +12,10 @@ using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Units.Commands;
 
-public record UpdateUnitStatusCommand(string Id, string Status) : IRequest<UnitDto>;
+public record UpdateUnitStatusCommand(string Id, string Status) : IRequest<UnitDto>, IInvalidatesCache
+{
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Unit];
+}
 
 public class UpdateUnitStatusCommandValidator : AbstractValidator<UpdateUnitStatusCommand>
 {
@@ -33,6 +38,7 @@ public class UpdateUnitStatusCommandHandler(
     IPropertyRepository propertyRepository,
     IProjectRepository projectRepository,
     IListingEmbeddingRepository embeddingRepository,
+    ICacheService cache,
     ILogger<UpdateUnitStatusCommandHandler> logger,
     IMapper mapper) : IRequestHandler<UpdateUnitStatusCommand, UnitDto>
 {
@@ -74,6 +80,10 @@ public class UpdateUnitStatusCommandHandler(
 
                 await propertyRepository.UpdateAsync(property, cancellationToken);
 
+                // A sold-flip cascades into the Property read model -- CacheInvalidationBehavior
+                // only knows about this command's own (Unit) entity type, not this conditional cascade.
+                await cache.BumpVersionsAsync([CacheEntityType.Property], cancellationToken);
+
                 if (propertyWasSold != propertyNowFullySold)
                 {
                     var project = await projectRepository.GetByIdAsync(property.ProjectId, cancellationToken);
@@ -85,6 +95,7 @@ public class UpdateUnitStatusCommandHandler(
                             : project.Status == Core.Enums.ProjectStatus.Sold ? Core.Enums.ProjectStatus.Active : project.Status;
 
                         await projectRepository.UpdateAsync(project, cancellationToken);
+                        await cache.BumpVersionsAsync([CacheEntityType.Project], cancellationToken);
                     }
                 }
             }

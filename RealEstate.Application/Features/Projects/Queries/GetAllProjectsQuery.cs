@@ -1,13 +1,17 @@
 using AutoMapper;
 using MediatR;
 using RealEstate.Application.Common;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
 using RealEstate.Application.Features.Projects.Specifications;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Projects.Queries;
 
-public record GetAllProjectsQuery(ProjectQueryParams Query) : IRequest<PagedResponse<ProjectDto>>;
+public record GetAllProjectsQuery(ProjectQueryParams Query) : IRequest<PagedResponse<ProjectDto>>, ICacheableQuery
+{
+    public CacheEntityType EntityType => CacheEntityType.Project;
+}
 
 public class GetAllProjectsQueryHandler(IProjectRepository repository, IMapper mapper)
     : IRequestHandler<GetAllProjectsQuery, PagedResponse<ProjectDto>>

@@ -2,8 +2,9 @@ using AutoMapper;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Application.DTOs;
-using RealEstate.Application.Features.Chat.Commands;
+using RealEstate.Application.Interfaces;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
@@ -11,7 +12,11 @@ using RealEstate.Core.ValueObjects;
 
 namespace RealEstate.Application.Features.Units.Commands;
 
-public record CreateUnitCommand(CreateUnitDto Dto) : IRequest<UnitDto>;
+public record CreateUnitCommand(CreateUnitDto Dto) : IRequest<UnitDto>, IInvalidatesCache
+{
+    // Also bumps Property: this create increments the parent property's TotalUnits.
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Unit, CacheEntityType.Property];
+}
 
 public class CreateUnitCommandValidator : AbstractValidator<CreateUnitCommand>
 {
@@ -26,7 +31,7 @@ public class CreateUnitCommandValidator : AbstractValidator<CreateUnitCommand>
 public class CreateUnitCommandHandler(
     IUnitRepository repository,
     IPropertyRepository propertyRepository,
-    IMediator mediator,
+    IUnitReindexPublisher reindexPublisher,
     ILogger<CreateUnitCommandHandler> logger,
     IMapper mapper) : IRequestHandler<CreateUnitCommand, UnitDto>
 {
@@ -51,13 +56,13 @@ public class CreateUnitCommandHandler(
 
         try
         {
-            await mediator.Send(new IndexUnitEmbeddingCommand(created.Id), cancellationToken);
+            await reindexPublisher.PublishAsync(created.Id, cancellationToken);
         }
         catch (Exception ex)
         {
             // Best-effort — the unit is created either way; the AI index just falls a step behind
-            // (e.g. OpenAI not configured, or a transient API error) until the next successful index.
-            logger.LogWarning(ex, "Failed to index unit {UnitId} for the AI chat assistant.", created.Id);
+            // (e.g. RabbitMQ unavailable) until the next successful index.
+            logger.LogWarning(ex, "Failed to queue AI index for unit {UnitId}.", created.Id);
         }
 
         return mapper.Map<UnitDto>(created);

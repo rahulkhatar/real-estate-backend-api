@@ -1,13 +1,17 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using RealEstate.Application.Interfaces;
 using RealEstate.Core.Interfaces;
+using RealEstate.Infrastructure.Caching;
 using RealEstate.Infrastructure.ExternalServices;
 using RealEstate.Infrastructure.ExternalServices.OpenAi;
 using RealEstate.Infrastructure.ExternalServices.PaymentGateways;
 using RealEstate.Infrastructure.Identity;
+using RealEstate.Infrastructure.Messaging;
 using RealEstate.Infrastructure.Persistence;
 using RealEstate.Infrastructure.Persistence.Repositories;
+using StackExchange.Redis;
 
 namespace RealEstate.Infrastructure;
 
@@ -64,6 +68,24 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri("https://api.openai.com/v1/");
         });
+
+        services.Configure<RedisSettings>(configuration.GetSection(RedisSettings.SectionName));
+        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        {
+            var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+            var configOptions = ConfigurationOptions.Parse(redisSettings.ConnectionString);
+            // Don't let a Redis outage block app startup or throw on first use -- the multiplexer
+            // keeps retrying in the background, and RedisCacheService degrades to "no cache" on
+            // every call while disconnected.
+            configOptions.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(configOptions);
+        });
+        services.AddSingleton<ICacheService, RedisCacheService>();
+
+        services.Configure<RabbitMqSettings>(configuration.GetSection(RabbitMqSettings.SectionName));
+        services.AddSingleton<RabbitMqConnectionManager>();
+        services.AddSingleton<IUnitReindexPublisher, RabbitMqUnitReindexPublisher>();
+        services.AddHostedService<EmbeddingReindexConsumerService>();
 
         return services;
     }

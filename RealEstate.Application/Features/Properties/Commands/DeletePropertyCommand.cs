@@ -1,10 +1,15 @@
 using MediatR;
+using RealEstate.Application.Common.Caching;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Properties.Commands;
 
-public record DeletePropertyCommand(string Id) : IRequest;
+public record DeletePropertyCommand(string Id) : IRequest, IInvalidatesCache
+{
+    // Also bumps Project: deletion decrements the parent project's TotalProperties.
+    public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Property, CacheEntityType.Project];
+}
 
 public class DeletePropertyCommandHandler(
     IPropertyRepository repository,
