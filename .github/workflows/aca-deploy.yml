@@ -1,5 +1,5 @@
 # Container-based deploy path: builds the API into a Docker image, pushes it to Docker Hub
-# (rahulk86/real-estate:api), and deploys that exact image to Azure Container Apps.
+# (rahulk86/real-estate:latest), and deploys that exact image to Azure Container Apps.
 #
 # Supersedes the earlier Web-App-for-Containers attempt (previously docker-deploy.yml). That
 # path failed because it reused a Managed Identity scoped to a different, unrelated Web App --
@@ -42,13 +42,8 @@ jobs:
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-
-      - id: meta
-        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -64,9 +59,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:api
-            ${{ env.IMAGE_NAME }}:api-${{ steps.meta.outputs.tag }}
+          tags: ${{ env.IMAGE_NAME }}:latest
 
   deploy:
     needs: build-and-push
@@ -88,4 +81,4 @@ jobs:
         with:
           inlineScript: |
             az containerapp update -n real-estate-backend -g ai-azure-ls \
-              --image ${{ env.IMAGE_NAME }}:api-${{ needs.build-and-push.outputs.image-tag }}
+              --image ${{ env.IMAGE_NAME }}:latest
