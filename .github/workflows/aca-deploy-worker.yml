@@ -1,0 +1,79 @@
+name: Build, push, and deploy Worker to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'RealEstate.Worker/**'
+      - 'RealEstate.Application/**'
+      - 'RealEstate.Core/**'
+      - 'RealEstate.Infrastructure/**'
+      - 'Dockerfile.worker'
+      - '.github/workflows/aca-deploy-worker.yml'
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: rahulk86/real-estate
+  IMAGE_TAG: worker-latest
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - run: dotnet restore RealEstate.Worker/RealEstate.Worker.csproj
+      - run: dotnet build RealEstate.Worker/RealEstate.Worker.csproj --configuration Release --no-restore
+      - run: dotnet test RealEstate.Tests/RealEstate.Tests.csproj --configuration Release
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.worker
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_ACA_DEPLOYER_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy image to Container App
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az containerapp update -n real-estate-worker -g ai-azure-ls \
+              --image ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+              --revision-suffix sha-${GITHUB_SHA:0:7}-${{ github.run_number }}

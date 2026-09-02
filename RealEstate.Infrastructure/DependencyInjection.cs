@@ -85,8 +85,18 @@ public static class DependencyInjection
         services.Configure<RabbitMqSettings>(configuration.GetSection(RabbitMqSettings.SectionName));
         services.AddSingleton<RabbitMqConnectionManager>();
         services.AddSingleton<IUnitReindexPublisher, RabbitMqUnitReindexPublisher>();
-        services.AddHostedService<EmbeddingReindexConsumerService>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the RabbitMQ reindex consumer as a hosted service. Kept separate from
+    /// AddInfrastructureServices so RealEstate.Api -- which still needs the publisher to send
+    /// reindex messages -- never runs the consumer. Only RealEstate.Worker calls this.
+    /// </summary>
+    public static IServiceCollection AddMessagingConsumer(this IServiceCollection services)
+    {
+        services.AddHostedService<EmbeddingReindexConsumerService>();
         return services;
     }
 }
