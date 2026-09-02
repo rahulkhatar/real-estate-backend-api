@@ -4,4 +4,5 @@
   <Project Path="RealEstate.Core/RealEstate.Core.csproj" />
   <Project Path="RealEstate.Infrastructure/RealEstate.Infrastructure.csproj" />
   <Project Path="RealEstate.Tests/RealEstate.Tests.csproj" />
+  <Project Path="RealEstate.Worker/RealEstate.Worker.csproj" />
 </Solution>
