@@ -92,9 +92,12 @@ jobs:
 
   # Parallel deploy target: the AKS cluster running the same image, set up alongside (not
   # replacing) Container Apps while that migration is being verified. Requires the
-  # real-estate-aca-deployer identity to be granted "Azure Kubernetes Service RBAC Writer" on
-  # the real-estate-aks cluster -- until that's done, this job fails harmlessly on its own,
-  # the Container Apps deploy above is unaffected.
+  # real-estate-aca-deployer identity to be granted BOTH "Azure Kubernetes Service Cluster
+  # User Role" (lets it call get-credentials at all) AND "Azure Kubernetes Service RBAC
+  # Writer" (lets it actually read/write objects once connected) on the real-estate-aks
+  # cluster -- two separate Azure RBAC layers, easy to grant only one by mistake. Until both
+  # are done, this job fails harmlessly on its own, the Container Apps deploy above is
+  # unaffected.
   deploy-aks:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -110,11 +113,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # The cluster uses Azure AD + Azure RBAC for Kubernetes auth, so kubectl needs the
+      # kubelogin exec-plugin binary to convert an AAD token into cluster credentials --
+      # ubuntu-latest runners don't have it preinstalled.
+      - name: Set up kubelogin
+        uses: azure/use-kubelogin@v1
+        with:
+          kubelogin-version: v0.2.9
+
       - name: Set AKS context
         uses: azure/aks-set-context@v4
         with:
           resource-group: ai-azure-ls
           cluster-name: real-estate-aks
+          admin: false
+          use-kubelogin: true
 
       - name: Roll out new image
         run: |
