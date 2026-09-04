@@ -9,3 +9,12 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
+    ignore:
+      # DevSecOps rollout: MediatR and AutoMapper are deliberately pinned to their last
+      # pre-commercial-license versions (12.x) -- see CLAUDE.md. A major-version bump would
+      # cross into paid-license territory and needs an explicit human decision, not an
+      # automated PR. Minor/patch bumps within 12.x are still fine and stay unblocked.
+      - dependency-name: "MediatR*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "AutoMapper*"
+        update-types: ["version-update:semver-major"]
