@@ -68,7 +68,7 @@ jobs:
       # DevSecOps rollout: Trivy container image CVE scan, report-only for now (exit-code: 0).
       # ignore-unfixed skips CVEs with no available patch yet -- nothing actionable there today.
       - name: Scan image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:latest
           format: 'sarif'

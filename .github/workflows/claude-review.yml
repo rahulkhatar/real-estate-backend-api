@@ -33,10 +33,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # DevSecOps rollout: without this, the action refuses to run on PRs opened by bots
-          # (confirmed -- it silently failed on the first real Dependabot PR, #26). Scoped to
-          # just dependabot[bot] rather than '*' so no other bot can trigger this workflow.
-          allowed_bots: "dependabot[bot]"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}

@@ -42,11 +42,11 @@ Both moved to a paid commercial license starting at MediatR 13.x / AutoMapper 13
 is pinned to the last free versions (MediatR ~12.5, AutoMapper 12.0.1) as a deliberate, explicit
 decision -- not an oversight. AutoMapper 12.0.1 has a known, accepted high-severity advisory
 (GHSA-rvv3-g6hj-g44x, unpatched on 12.x) that comes with this choice; it is not something to fix
-by upgrading. `.github/dependabot.yml` already blocks major-version bumps for both packages, but
-if a PR (Dependabot or otherwise) manually attempts one anyway, **request changes** -- crossing
-into paid-license territory is a decision only the human owner can make, never something to
-approve automatically, even when the PR's stated motivation is a real CVE fix. Minor/patch bumps
-within the 12.x line are fine and don't need special scrutiny beyond the usual review.
+by upgrading. If a PR attempts a major-version bump on either package anyway, **request
+changes** -- crossing into paid-license territory is a decision only the human owner can make,
+never something to approve automatically, even when the PR's stated motivation is a real CVE
+fix. Minor/patch bumps within the 12.x line are fine and don't need special scrutiny beyond the
+usual review.
 
 ## Conventions to prefer
 
