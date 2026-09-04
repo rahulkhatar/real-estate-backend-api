@@ -35,6 +35,10 @@ jobs:
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
+    # DevSecOps rollout: security-events write needed for the Trivy SARIF upload step below.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +58,24 @@ jobs:
           file: ./Dockerfile.worker
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+      # DevSecOps rollout: Trivy container image CVE scan, report-only for now (exit-code: 0).
+      # ignore-unfixed skips CVEs with no available patch yet -- nothing actionable there today.
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          ignore-unfixed: true
+
+      # DevSecOps rollout: publish Trivy findings to the repo's Security tab, alongside CodeQL.
+      - name: Upload Trivy results to Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   deploy:
     needs: build-and-push
@@ -78,36 +100,56 @@ jobs:
               --image ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
               --revision-suffix sha-${GITHUB_SHA:0:7}-${{ github.run_number }}
 
-  # Parallel deploy target: the AKS cluster running the same worker image, set up alongside
-  # (not replacing) Container Apps while that migration is being verified. Requires the
-  # real-estate-aca-deployer identity to be granted "Azure Kubernetes Service RBAC Writer" on
-  # the real-estate-aks cluster -- until that's done, this job fails harmlessly on its own,
-  # the Container Apps deploy above is unaffected.
-  deploy-aks:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    environment: prod
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_ACA_DEPLOYER_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Set AKS context
-        uses: azure/aks-set-context@v4
-        with:
-          resource-group: ai-azure-ls
-          cluster-name: real-estate-aks
-
-      - name: Roll out new image
-        run: |
-          # Same reasoning as the backend workflow's deploy-aks job: rollout restart forces a
-          # new pod generation, and imagePullPolicy: Always (set in k8s/overlays/azure) makes
-          # that generation actually re-pull ":worker-latest" instead of reusing a cached image.
-          kubectl rollout restart deployment/worker-deployment -n real-estate
-          kubectl rollout status deployment/worker-deployment -n real-estate --timeout=120s
+  # ============================================================================================
+  # KUBERNETES (AKS) -- PAUSED. Everything below is commented out on purpose: pushes to main
+  # now behave exactly as they did before any Kubernetes work (test -> build-and-push -> deploy
+  # to Container Apps only). The AKS cluster, k8s/ manifests, and IAM grants are all still
+  # intact and untouched -- to resume auto-deploying to AKS on every push, just uncomment the
+  # deploy-aks job below, no other changes needed.
+  # ============================================================================================
+  # # Parallel deploy target: the AKS cluster running the same worker image, set up alongside
+  # # (not replacing) Container Apps while that migration is being verified. Requires the
+  # # real-estate-aca-deployer identity to be granted BOTH "Azure Kubernetes Service Cluster
+  # # User Role" (lets it call get-credentials at all) AND "Azure Kubernetes Service RBAC
+  # # Writer" (lets it actually read/write objects once connected) on the real-estate-aks
+  # # cluster -- two separate Azure RBAC layers, easy to grant only one by mistake. Until both
+  # # are done, this job fails harmlessly on its own, the Container Apps deploy above is
+  # # unaffected.
+  # deploy-aks:
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   environment: prod
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   steps:
+  #     - name: Login to Azure
+  #       uses: azure/login@v2
+  #       with:
+  #         client-id: ${{ secrets.AZURE_ACA_DEPLOYER_CLIENT_ID }}
+  #         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+  #         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  #
+  #     # The cluster uses Azure AD + Azure RBAC for Kubernetes auth, so kubectl needs the
+  #     # kubelogin exec-plugin binary to convert an AAD token into cluster credentials --
+  #     # ubuntu-latest runners don't have it preinstalled.
+  #     - name: Set up kubelogin
+  #       uses: azure/use-kubelogin@v1
+  #       with:
+  #         kubelogin-version: v0.2.9
+  #
+  #     - name: Set AKS context
+  #       uses: azure/aks-set-context@v4
+  #       with:
+  #         resource-group: ai-azure-ls
+  #         cluster-name: real-estate-aks
+  #         admin: false
+  #         use-kubelogin: true
+  #
+  #     - name: Roll out new image
+  #       run: |
+  #         # Same reasoning as the backend workflow's deploy-aks job: rollout restart forces a
+  #         # new pod generation, and imagePullPolicy: Always (set in k8s/overlays/azure) makes
+  #         # that generation actually re-pull ":worker-latest" instead of reusing a cached image.
+  #         kubectl rollout restart deployment/worker-deployment -n real-estate
+  #         kubectl rollout status deployment/worker-deployment -n real-estate --timeout=120s

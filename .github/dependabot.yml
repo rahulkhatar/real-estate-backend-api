@@ -1,0 +1,11 @@
+# DevSecOps rollout: proactive NuGet version-update PRs (not just CVE fixes -- see repo Settings
+# > Advanced Security > Dependabot alerts/security updates for that).
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
