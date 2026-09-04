@@ -1,15 +1,17 @@
 name: Claude PR Review
 
-# Automated reviewer on every PR, into dev or main -- covers the whole repo (API, Worker,
-# Redis/RabbitMQ client code in Infrastructure), no path filter. Advisory in the sense that
-# nothing here touches branch protection, but a real `gh pr review --request-changes` verdict
-# (not just a comment) makes GitHub natively grey out the Merge button until it's resolved --
-# same as a human reviewer requesting changes would. The human always clicks Merge themselves;
-# this workflow only ever reviews, it never pushes, opens, or merges anything.
+# Automated reviewer on PRs into dev -- the FIRST PR any change goes through (feature -> dev,
+# per this repo's branch flow). Deliberately not also triggered on dev -> main promotion PRs --
+# that would just re-review the same already-reviewed code a second time. Covers the whole repo
+# (API, Worker, Redis/RabbitMQ client code in Infrastructure), no path filter. Advisory in the
+# sense that nothing here touches branch protection, but a real `gh pr review --request-changes`
+# verdict (not just a comment) makes GitHub natively grey out the Merge button until it's
+# resolved -- same as a human reviewer requesting changes would. The human always clicks Merge
+# themselves; this workflow only ever reviews, it never pushes, opens, or merges anything.
 
 on:
   pull_request:
-    branches: [dev, main]
+    branches: [dev]
     types: [opened, synchronize, reopened]
 
 concurrency:
