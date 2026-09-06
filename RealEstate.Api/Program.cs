@@ -32,6 +32,12 @@ builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelS
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+// The AI-reindex consumer used to run in a separate RealEstate.Worker process/deployment.
+// Folded in here since BigRock's shared hosting (unlike Azure Container Apps) can't run a
+// second standalone process -- IIS/ANCM only keeps this one process alive, so the consumer
+// now runs as a hosted service inside the API itself instead.
+builder.Services.AddMessagingConsumer();
+
 builder.Services.AddOpenApi();
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
