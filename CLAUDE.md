@@ -3,6 +3,13 @@
 This file is read by the automated reviewer in `.github/workflows/claude-review.yml` on every
 PR, and by any interactive Claude Code session working in this repo.
 
+**The automated reviewer is currently paused** (as of 2026-09-06) -- every run started failing
+instantly on a billing/quota/access rejection, not a code issue. See the comment block at the
+top of `claude-review.yml` for the diagnosis and how to resume it. While paused, `dev` branch
+protection still requires 1 approving review (previously satisfied by this bot, no other
+reviewer configured) -- every PR into `dev` needs the repo owner's admin-bypass merge until
+it's back.
+
 ## Project shape
 
 Single repo containing both the API and the background Worker:

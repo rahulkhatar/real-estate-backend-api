@@ -8,11 +8,20 @@ name: Claude PR Review
 # verdict (not just a comment) makes GitHub natively grey out the Merge button until it's
 # resolved -- same as a human reviewer requesting changes would. The human always clicks Merge
 # themselves; this workflow only ever reviews, it never pushes, opens, or merges anything.
-
+#
+# PAUSED as of 2026-09-06: every run started failing instantly (num_turns: 1, total_cost_usd: 0,
+# failing ~400ms after model init) -- the signature of a billing/quota/access rejection on the
+# very first API call, not a code or prompt problem. `dev` branch protection requires 1
+# approving review, which this bot was the one providing (no other reviewers configured) --
+# with it paused, every PR into dev needs the repo owner's admin-bypass merge until this is
+# fixed. To resume: diagnose the ANTHROPIC_API_KEY issue (console.anthropic.com -- check key
+# validity, credit balance/spend limits, and access to the claude-opus-5[1m] model), then
+# restore the `pull_request` trigger below (this exact block, just uncommented).
 on:
-  pull_request:
-    branches: [dev]
-    types: [opened, synchronize, reopened]
+  # pull_request:
+  #   branches: [dev]
+  #   types: [opened, synchronize, reopened]
+  workflow_dispatch: {}
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}-${{ github.base_ref }}
