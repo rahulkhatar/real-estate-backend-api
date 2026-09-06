@@ -5,34 +5,46 @@ PR, and by any interactive Claude Code session working in this repo.
 
 ## Project shape
 
-Single repo containing both the API and the background Worker:
-- `RealEstate.Api` -- the HTTP API
-- `RealEstate.Worker` -- background job processor (RabbitMQ consumer)
+Single repo, single deployable process now -- there is no more `RealEstate.Worker` project:
+- `RealEstate.Api` -- the HTTP API. Also hosts the AI-reindex queue consumer as a hosted
+  service (`AddMessagingConsumer()` in `Program.cs`) -- this used to run in a separate
+  `RealEstate.Worker` process/deployment, folded in because the target hosting (BigRock
+  shared hosting) can only run one process per app, not a second standalone worker.
 - `RealEstate.Application`, `RealEstate.Core`, `RealEstate.Infrastructure` -- shared layers
   (Infrastructure includes the in-process cache and RabbitMQ connection/consumer setup)
 - `RealEstate.Tests`
 
-Deploy path: Docker Hub (`rahulk86/real-estate:latest` / `:worker-latest`) -> Azure Container
-Apps. RabbitMQ is hosted externally on CloudAMQP (a third-party service, not an Azure
-resource) -- this repo's only involvement is the client code in `RealEstate.Infrastructure`
-that talks to it, which is fully in scope for review like anything else. There is no Redis
-(or any distributed cache) anymore: `ICacheService` is backed by an in-process
-`IMemoryCache` (`InMemoryCacheService`) -- a self-hosted Redis Container App used to run this,
-but it couldn't scale to zero (persistent connections aren't traffic-scalable the way HTTP is)
-so it cost money continuously; the cache was already a pure, fail-open performance
-optimization over MongoDB, never a system of record, making the swap safe. Same reasoning is
-why RabbitMQ moved off a self-hosted Container App to a hosted provider instead of also being
-dropped -- unlike the cache, the reindex queue still needs a real broker, just not a
-self-hosted one.
+Deploy path is mid-migration: currently still Docker Hub (`rahulk86/real-estate:latest`) ->
+Azure Container Apps via `aca-deploy.yml`, but the goal is moving off Container Apps entirely
+to BigRock shared hosting (the same host the frontend already FTP-deploys to) to stop paying
+for Azure compute. A prior BigRock FTP deploy setup for this exact API already existed before
+it moved to Azure (`azure-pipelines.yml` / `azure-pipelines.dev.yml` at the repo root -- dead
+weight now since GitHub doesn't run Azure Pipelines YAML, but valuable reference: it confirms
+.NET 10 + ANCM v2 already work on the BigRock server, and has working, already-debugged logic
+for a framework-dependent publish + FTP deploy). Until a GitHub Actions equivalent replaces
+`aca-deploy.yml`, Container Apps is still the live deploy target -- don't assume BigRock
+deploy is active yet.
+
+RabbitMQ is hosted externally on CloudAMQP (a third-party service, not an Azure resource) --
+this repo's only involvement is the client code in `RealEstate.Infrastructure` that talks to
+it, which is fully in scope for review like anything else. There is no Redis (or any
+distributed cache) anymore: `ICacheService` is backed by an in-process `IMemoryCache`
+(`InMemoryCacheService`) -- a self-hosted Redis Container App used to run this, but it
+couldn't scale to zero (persistent connections aren't traffic-scalable the way HTTP is) so it
+cost money continuously; the cache was already a pure, fail-open performance optimization over
+MongoDB, never a system of record, making the swap safe. Same reasoning is why RabbitMQ moved
+off a self-hosted Container App to a hosted provider instead of also being dropped -- unlike
+the cache, the reindex queue still needs a real broker, just not a self-hosted one.
 
 ## CI/CD map (so a review doesn't misjudge risk)
 
 - `dev-ci.yml` -- required `Build & test` status check, runs on push to `dev` and on every PR
   into `dev` or `main`.
-- `aca-deploy.yml` / `aca-deploy-worker.yml` -- production deploy, triggered by push to `main`
-  (API and Worker respectively). Both contain a fully commented-out `deploy-aks` job.
-  **Do not suggest uncommenting, modifying, or otherwise touching that job** -- it's a
-  Kubernetes deploy path intentionally paused/parked, not dead code to clean up.
+- `aca-deploy.yml` -- production deploy, triggered by push to `main`. Contains a fully
+  commented-out `deploy-aks` job. **Do not suggest uncommenting, modifying, or otherwise
+  touching that job** -- it's a Kubernetes deploy path intentionally paused/parked, not dead
+  code to clean up. This whole file is itself expected to be replaced by a BigRock FTP deploy
+  workflow soon (see Project shape above) -- don't be surprised if it disappears.
 
 ## Known footgun to specifically check for
 
