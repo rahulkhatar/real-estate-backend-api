@@ -113,9 +113,21 @@ jobs:
           New-Item -ItemType Directory -Force -Path 'publish/logs' | Out-Null
           Set-Content -Path 'publish/logs/.keep' -Value 'placeholder so FTP upload creates this directory'
 
-      - name: Normalize FTP remote directory (must end with /)
+      - name: Normalize FTP server + remote directory
         shell: pwsh
         run: |
+          # FTP_SERVER was set up for the old Azure Pipelines FtpUpload@2 task, which accepted
+          # a full URL (e.g. ftps://host). This action's `server` input wants a bare hostname --
+          # `protocol` is a separate input -- so a leftover scheme prefix makes DNS resolution
+          # fail on the whole "ftps://host" string. Strip it here rather than depend on the
+          # secret being reformatted.
+          $server = '${{ secrets.FTP_SERVER }}' -replace '^\w+://', ''
+          # Stripping the scheme prefix means this is no longer the exact registered secret
+          # string, so GitHub's automatic log masking won't catch it -- add-mask explicitly,
+          # since this is a public repo and the bare hostname/IP shouldn't leak into logs.
+          Write-Output "::add-mask::$server"
+          Add-Content -Path $env:GITHUB_ENV -Value "FTP_SERVER_NORMALIZED=$server"
+
           $dir = '${{ secrets.FTP_REMOTE_DIRECTORY }}'
           if (-not $dir.EndsWith('/')) { $dir = "$dir/" }
           Add-Content -Path $env:GITHUB_ENV -Value "FTP_REMOTE_DIR_NORMALIZED=$dir"
@@ -123,7 +135,7 @@ jobs:
       - name: FTP upload to BigRock
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ env.FTP_SERVER_NORMALIZED }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
