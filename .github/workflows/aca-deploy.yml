@@ -12,13 +12,20 @@
 # Verified end-to-end via a manual workflow_dispatch run on dev (test -> build-and-push ->
 # deploy all succeeded, prod approval gate exercised, live app confirmed serving the deployed
 # image) before enabling the push:[main] trigger below.
+#
+# PAUSED as of 2026-09-06: moving the API off Azure Container Apps entirely to BigRock shared
+# hosting (see bigrock-deploy.yml), to stop paying for Azure compute. Parked, not deleted, in
+# case BigRock hosting doesn't work out and this needs to come back -- the Redis and RabbitMQ
+# Container Apps this used to depend on are also being retired separately (see CLAUDE.md).
+# To resume: restore the `push` trigger below (this exact block, just uncommented), and pause
+# bigrock-deploy.yml instead.
 
 name: Build, push, and deploy to Azure Container Apps
 
 on:
-  push:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - main
   workflow_dispatch:
 
 env:

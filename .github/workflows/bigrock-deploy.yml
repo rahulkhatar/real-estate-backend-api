@@ -1,0 +1,128 @@
+# Replaces aca-deploy.yml (paused, see that file) -- builds, tests, and FTP-deploys the API to
+# BigRock shared hosting instead of Azure Container Apps, to stop paying for Azure compute.
+#
+# This is a GitHub Actions port of the proven logic already sitting dormant in this repo's
+# azure-pipelines.yml (left over from before this backend moved from Azure DevOps to GitHub) --
+# same framework-dependent publish (-p:UseAppHost=false, relies on the .NET 10 runtime + ANCM v2
+# already confirmed installed on the BigRock server), same appsettings.Production.json secrets
+# templating, same "enable ANCM stdout logging" step for startup-failure debugging.
+#
+# workflow_dispatch ONLY for now -- deliberately NOT wired to push:[main] yet. Same pattern
+# aca-deploy.yml itself used: verify end-to-end with a manual run first, only enable the
+# automatic trigger once that's actually confirmed working. Add the push:[main] trigger back
+# once a manual run has FTP-deployed successfully and the live site's been checked.
+on:
+  workflow_dispatch:
+
+env:
+  apiProject: RealEstate.Api/RealEstate.Api.csproj
+  testProject: RealEstate.Tests/RealEstate.Tests.csproj
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: dotnet restore
+        run: dotnet restore ${{ env.apiProject }}
+
+      - name: dotnet build
+        run: dotnet build ${{ env.apiProject }} --configuration Release --no-restore
+
+      - name: dotnet test
+        run: dotnet test ${{ env.testProject }} --configuration Release
+
+      - name: dotnet publish (framework-dependent, no apphost)
+        # No -r/--self-contained, so this is framework-dependent by default -- relies on the
+        # .NET 10 runtime already being installed on the BigRock server (same bet the old
+        # azure-pipelines.yml made, confirmed there since other .NET apps already run there).
+        # UseAppHost=false means no project-specific .exe: web.config's processPath becomes
+        # "dotnet" with the dll as an argument, so IIS just runs the shared dotnet.exe --
+        # avoids the "550 Access is denied" FTP error the old pipeline hit uploading a .exe.
+        run: >
+          dotnet publish ${{ env.apiProject }}
+          --configuration Release
+          -p:UseAppHost=false
+          --output publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-publish
+          path: publish/
+
+  deploy:
+    needs: build-and-test
+    runs-on: windows-latest
+    environment: prod
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-publish
+          path: publish
+
+      - name: Generate appsettings.Production.json from secrets
+        shell: pwsh
+        run: |
+          $templatePath = 'publish/appsettings.Production.template.json'
+          $template = Get-Content -Raw -Path $templatePath
+
+          $replacements = @{
+            '#{MongoConnectionString}#'       = '${{ secrets.MONGO_CONNECTION_STRING }}'
+            '#{MongoDatabaseName}#'           = '${{ secrets.MONGO_DATABASE_NAME }}'
+            '#{JwtSecret}#'                   = '${{ secrets.JWT_SECRET }}'
+            '#{CorsAllowedOrigin}#'           = '${{ secrets.CORS_ALLOWED_ORIGIN }}'
+            '#{CloudflareR2AccountId}#'       = '${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}'
+            '#{CloudflareR2AccessKeyId}#'     = '${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}'
+            '#{CloudflareR2SecretAccessKey}#' = '${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}'
+            '#{CloudflareR2BucketName}#'      = '${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}'
+            '#{CloudflareR2PublicBaseUrl}#'   = '${{ secrets.CLOUDFLARE_R2_PUBLIC_BASE_URL }}'
+            '#{OpenAiApiKey}#'                = '${{ secrets.OPENAI_API_KEY }}'
+            '#{AdminEmail}#'                  = '${{ secrets.ADMIN_EMAIL }}'
+            '#{AdminPassword}#'               = '${{ secrets.ADMIN_PASSWORD }}'
+            '#{AdminName}#'                   = '${{ secrets.ADMIN_NAME }}'
+            '#{RabbitMqHostName}#'            = '${{ secrets.RABBITMQ_HOST }}'
+            '#{RabbitMqPort}#'                = '${{ secrets.RABBITMQ_PORT }}'
+            '#{RabbitMqVirtualHost}#'         = '${{ secrets.RABBITMQ_VIRTUAL_HOST }}'
+            '#{RabbitMqUserName}#'            = '${{ secrets.RABBITMQ_USERNAME }}'
+            '#{RabbitMqPassword}#'            = '${{ secrets.RABBITMQ_PASSWORD }}'
+            '#{RabbitMqUseSsl}#'              = '${{ secrets.RABBITMQ_USE_SSL }}'
+          }
+
+          foreach ($key in $replacements.Keys) {
+            $template = $template.Replace($key, $replacements[$key])
+          }
+
+          Set-Content -Path 'publish/appsettings.Production.json' -Value $template -NoNewline
+          Remove-Item $templatePath
+
+      - name: Enable ANCM stdout logging for startup-failure debugging
+        shell: pwsh
+        run: |
+          $webConfigPath = 'publish/web.config'
+          (Get-Content -Raw -Path $webConfigPath) -replace 'stdoutLogEnabled="false"', 'stdoutLogEnabled="true"' |
+            Set-Content -Path $webConfigPath -NoNewline
+
+          # ANCM writes stdout logs into .\logs\ but never creates the directory itself --
+          # without this, a startup crash produces no log file at all to diagnose from.
+          New-Item -ItemType Directory -Force -Path 'publish/logs' | Out-Null
+          Set-Content -Path 'publish/logs/.keep' -Value 'placeholder so FTP upload creates this directory'
+
+      - name: FTP upload to BigRock
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./publish/
+          server-dir: ${{ secrets.FTP_REMOTE_DIRECTORY }}
+          # Wipes stale files out of the remote directory before uploading -- same reasoning as
+          # the old pipeline's cleanContents: true, avoids old dependency DLLs or a leftover
+          # appsettings.Production.json from a prior deploy's secrets sticking around.
+          dangerous-clean-slate: true
