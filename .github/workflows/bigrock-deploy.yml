@@ -113,6 +113,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path 'publish/logs' | Out-Null
           Set-Content -Path 'publish/logs/.keep' -Value 'placeholder so FTP upload creates this directory'
 
+      - name: Normalize FTP remote directory (must end with /)
+        shell: pwsh
+        run: |
+          $dir = '${{ secrets.FTP_REMOTE_DIRECTORY }}'
+          if (-not $dir.EndsWith('/')) { $dir = "$dir/" }
+          Add-Content -Path $env:GITHUB_ENV -Value "FTP_REMOTE_DIR_NORMALIZED=$dir"
+
       - name: FTP upload to BigRock
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
@@ -121,7 +128,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           local-dir: ./publish/
-          server-dir: ${{ secrets.FTP_REMOTE_DIRECTORY }}
+          server-dir: ${{ env.FTP_REMOTE_DIR_NORMALIZED }}
           # Wipes stale files out of the remote directory before uploading -- same reasoning as
           # the old pipeline's cleanContents: true, avoids old dependency DLLs or a leftover
           # appsettings.Production.json from a prior deploy's secrets sticking around.
