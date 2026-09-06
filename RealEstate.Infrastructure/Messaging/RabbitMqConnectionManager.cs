@@ -34,6 +34,15 @@ public sealed class RabbitMqConnectionManager(IOptions<RabbitMqSettings> options
                 Password = settings.Password,
             };
 
+            if (settings.UseSsl)
+            {
+                factory.Ssl = new SslOption
+                {
+                    Enabled = true,
+                    ServerName = settings.HostName,
+                };
+            }
+
             connection = await factory.CreateConnectionAsync(ct);
             return connection;
         }

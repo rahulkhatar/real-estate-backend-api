@@ -35,6 +35,10 @@ jobs:
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
+    # DevSecOps rollout: security-events write needed for the Trivy SARIF upload step below.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +58,24 @@ jobs:
           file: ./Dockerfile.worker
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+      # DevSecOps rollout: Trivy container image CVE scan, report-only for now (exit-code: 0).
+      # ignore-unfixed skips CVEs with no available patch yet -- nothing actionable there today.
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          ignore-unfixed: true
+
+      # DevSecOps rollout: publish Trivy findings to the repo's Security tab, alongside CodeQL.
+      - name: Upload Trivy results to Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   deploy:
     needs: build-and-push

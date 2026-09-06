@@ -1,0 +1,66 @@
+name: Claude PR Review
+
+# Automated reviewer on PRs into dev -- the FIRST PR any change goes through (feature -> dev,
+# per this repo's branch flow). Deliberately not also triggered on dev -> main promotion PRs --
+# that would just re-review the same already-reviewed code a second time. Covers the whole repo
+# (API, Worker, Redis/RabbitMQ client code in Infrastructure), no path filter. Advisory in the
+# sense that nothing here touches branch protection, but a real `gh pr review --request-changes`
+# verdict (not just a comment) makes GitHub natively grey out the Merge button until it's
+# resolved -- same as a human reviewer requesting changes would. The human always clicks Merge
+# themselves; this workflow only ever reviews, it never pushes, opens, or merges anything.
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}-${{ github.base_ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request. Follow the project context and checklist in CLAUDE.md at
+            the repo root, if present, in addition to your own judgement on:
+            - Correctness bugs and edge cases
+            - Security implications
+            - Consistency with existing patterns in this codebase (prefer reuse over new
+              abstractions or libraries)
+            - Anything affecting the API, Worker, or the Redis/RabbitMQ client code under
+              RealEstate.Infrastructure -- all in scope, not just the API
+
+            Note: The PR branch is already checked out in the current working directory.
+
+            Use `gh pr comment` for top-level feedback.
+            Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to
+            highlight specific code issues.
+            Only post GitHub comments -- don't submit review text as chat messages.
+
+            Finally, submit a formal review verdict (required, this is not optional):
+            - `gh pr review ${{ github.event.pull_request.number }} --approve --body "..."` if
+              you found nothing concerning.
+            - `gh pr review ${{ github.event.pull_request.number }} --comment --body "..."` for
+              minor, non-blocking notes.
+            - `gh pr review ${{ github.event.pull_request.number }} --request-changes --body "..."`
+              for real problems -- explain exactly what needs to change.
+            Always give the body a short, specific summary of your reasoning, not just a verdict.
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*)"
