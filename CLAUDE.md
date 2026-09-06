@@ -9,13 +9,21 @@ Single repo containing both the API and the background Worker:
 - `RealEstate.Api` -- the HTTP API
 - `RealEstate.Worker` -- background job processor (RabbitMQ consumer)
 - `RealEstate.Application`, `RealEstate.Core`, `RealEstate.Infrastructure` -- shared layers
-  (Infrastructure includes the Redis cache client and RabbitMQ connection/consumer setup)
+  (Infrastructure includes the in-process cache and RabbitMQ connection/consumer setup)
 - `RealEstate.Tests`
 
 Deploy path: Docker Hub (`rahulk86/real-estate:latest` / `:worker-latest`) -> Azure Container
-Apps. Redis and RabbitMQ run as their own Container Apps (official images, no custom code) --
-this repo's only involvement with them is the client code in `RealEstate.Infrastructure` that
-talks to them, which is fully in scope for review like anything else.
+Apps. RabbitMQ is hosted externally on CloudAMQP (a third-party service, not an Azure
+resource) -- this repo's only involvement is the client code in `RealEstate.Infrastructure`
+that talks to it, which is fully in scope for review like anything else. There is no Redis
+(or any distributed cache) anymore: `ICacheService` is backed by an in-process
+`IMemoryCache` (`InMemoryCacheService`) -- a self-hosted Redis Container App used to run this,
+but it couldn't scale to zero (persistent connections aren't traffic-scalable the way HTTP is)
+so it cost money continuously; the cache was already a pure, fail-open performance
+optimization over MongoDB, never a system of record, making the swap safe. Same reasoning is
+why RabbitMQ moved off a self-hosted Container App to a hosted provider instead of also being
+dropped -- unlike the cache, the reindex queue still needs a real broker, just not a
+self-hosted one.
 
 ## CI/CD map (so a review doesn't misjudge risk)
 
