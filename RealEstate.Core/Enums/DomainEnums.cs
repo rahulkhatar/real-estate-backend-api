@@ -77,3 +77,17 @@ public enum PaymentStatus
     Failed,
     Refunded
 }
+
+public enum InquiryStatus
+{
+    New,
+    Contacted,
+    Closed
+}
+
+public enum InquiryListingType
+{
+    Project,
+    Property,
+    Unit
+}
