@@ -47,6 +47,16 @@ public class AgentsController(IMediator mediator, ICurrentUserService currentUse
         return Ok(result);
     }
 
+    /// <summary>Always the current user's own password -- never another agent's, even for an Admin.</summary>
+    [HttpPut("me/password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
+    {
+        if (currentUser.AgentId is null) return Unauthorized();
+
+        await mediator.Send(new ChangePasswordCommand(currentUser.AgentId, dto));
+        return NoContent();
+    }
+
     [HttpGet("{id}/bookings")]
     public async Task<ActionResult<List<BookingDto>>> GetBookings(string id)
     {
