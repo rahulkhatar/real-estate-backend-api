@@ -21,16 +21,17 @@ Single repo, single deployable process now -- there is no more `RealEstate.Worke
   (Infrastructure includes the in-process cache and RabbitMQ connection/consumer setup)
 - `RealEstate.Tests`
 
-Deploy path is mid-migration: currently still Docker Hub (`rahulk86/real-estate:latest`) ->
-Azure Container Apps via `aca-deploy.yml`, but the goal is moving off Container Apps entirely
-to BigRock shared hosting (the same host the frontend already FTP-deploys to) to stop paying
-for Azure compute. A prior BigRock FTP deploy setup for this exact API already existed before
-it moved to Azure (`azure-pipelines.yml` / `azure-pipelines.dev.yml` at the repo root -- dead
-weight now since GitHub doesn't run Azure Pipelines YAML, but valuable reference: it confirms
-.NET 10 + ANCM v2 already work on the BigRock server, and has working, already-debugged logic
-for a framework-dependent publish + FTP deploy). Until a GitHub Actions equivalent replaces
-`aca-deploy.yml`, Container Apps is still the live deploy target -- don't assume BigRock
-deploy is active yet.
+Deploy path is mid-migration off Azure Container Apps to BigRock shared hosting (the same
+host the frontend already FTP-deploys to), to stop paying for Azure compute. `aca-deploy.yml`
+is now paused (see the comment at its top). Its replacement, `bigrock-deploy.yml`, is a
+GitHub Actions port of the proven logic already sitting dormant in this repo's
+`azure-pipelines.yml` / `azure-pipelines.dev.yml` (left over from before this backend moved
+from Azure DevOps to GitHub -- those files are dead weight now since GitHub doesn't run Azure
+Pipelines YAML, but they're what confirms .NET 10 + ANCM v2 already work on the BigRock
+server). `bigrock-deploy.yml` is `workflow_dispatch`-only for now, deliberately not wired to
+`push:[main]` yet -- same "verify manually first" pattern `aca-deploy.yml` itself used before
+its own automatic trigger was enabled. Don't assume BigRock deploy is live in production until
+that trigger is added.
 
 RabbitMQ is hosted externally on CloudAMQP (a third-party service, not an Azure resource) --
 this repo's only involvement is the client code in `RealEstate.Infrastructure` that talks to
@@ -47,11 +48,12 @@ the cache, the reindex queue still needs a real broker, just not a self-hosted o
 
 - `dev-ci.yml` -- required `Build & test` status check, runs on push to `dev` and on every PR
   into `dev` or `main`.
-- `aca-deploy.yml` -- production deploy, triggered by push to `main`. Contains a fully
-  commented-out `deploy-aks` job. **Do not suggest uncommenting, modifying, or otherwise
-  touching that job** -- it's a Kubernetes deploy path intentionally paused/parked, not dead
-  code to clean up. This whole file is itself expected to be replaced by a BigRock FTP deploy
-  workflow soon (see Project shape above) -- don't be surprised if it disappears.
+- `aca-deploy.yml` -- **paused** (see Project shape above), `workflow_dispatch` only now.
+  Contains a fully commented-out `deploy-aks` job. **Do not suggest uncommenting, modifying,
+  or otherwise touching that job** -- it's a Kubernetes deploy path intentionally
+  paused/parked, not dead code to clean up.
+- `bigrock-deploy.yml` -- the API's new deploy path: build, test, framework-dependent
+  publish, FTP to BigRock. `workflow_dispatch` only until manually verified end-to-end.
 
 ## Known footgun to specifically check for
 

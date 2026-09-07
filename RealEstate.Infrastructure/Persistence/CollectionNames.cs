@@ -10,4 +10,5 @@ public static class CollectionNames
     public const string Bookings = "bookings";
     public const string Payments = "payments";
     public const string ListingEmbeddings = "listingEmbeddings";
+    public const string Inquiries = "inquiries";
 }

@@ -49,5 +49,8 @@ public class MappingProfile : Profile
 
         // Payment
         CreateMap<Payment, PaymentDto>();
+
+        // Inquiry
+        CreateMap<Inquiry, InquiryDto>();
     }
 }
