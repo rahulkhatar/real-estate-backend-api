@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IListingEmbeddingRepository, ListingEmbeddingRepository>();
+        services.AddScoped<IInquiryRepository, InquiryRepository>();
 
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
