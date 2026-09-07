@@ -2,6 +2,7 @@ using AutoMapper;
 using FluentValidation;
 using MediatR;
 using RealEstate.Application.DTOs;
+using RealEstate.Application.Interfaces;
 using RealEstate.Core.Entities;
 using RealEstate.Core.Enums;
 using RealEstate.Core.Exceptions;
@@ -58,6 +59,35 @@ public class UpdateAgentProfileCommandHandler(IAgentRepository repository, IMapp
         mapper.Map(request.Dto, agent);
         await repository.UpdateAsync(agent, cancellationToken);
         return mapper.Map<AgentDto>(agent);
+    }
+}
+
+/// <summary>Self-service only (enforced at the controller via the current user's own id) -- requires the current password, matching the login handler's exact "Invalid email or password" wording so a wrong guess doesn't leak whether the account exists.</summary>
+public record ChangePasswordCommand(string AgentId, ChangePasswordDto Dto) : IRequest;
+
+public class ChangePasswordCommandValidator : AbstractValidator<ChangePasswordCommand>
+{
+    public ChangePasswordCommandValidator()
+    {
+        RuleFor(x => x.AgentId).NotEmpty();
+        RuleFor(x => x.Dto.CurrentPassword).NotEmpty();
+        RuleFor(x => x.Dto.NewPassword).MinimumLength(8).WithMessage("Password must be at least 8 characters.");
+    }
+}
+
+public class ChangePasswordCommandHandler(IAgentRepository repository, IPasswordHasher passwordHasher)
+    : IRequestHandler<ChangePasswordCommand>
+{
+    public async Task Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
+    {
+        var agent = await repository.GetByIdAsync(request.AgentId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Agent), request.AgentId);
+
+        if (!passwordHasher.Verify(request.Dto.CurrentPassword, agent.PasswordHash))
+            throw new UnauthorizedAppException("Current password is incorrect.");
+
+        agent.PasswordHash = passwordHasher.Hash(request.Dto.NewPassword);
+        await repository.UpdateAsync(agent, cancellationToken);
     }
 }
 

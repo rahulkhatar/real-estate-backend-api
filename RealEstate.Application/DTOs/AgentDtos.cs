@@ -35,6 +35,12 @@ public class UpdateAgentCommissionDto
     public decimal CommissionPercentage { get; set; }
 }
 
+public class ChangePasswordDto
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 public class AgentEarningsDto
 {
     public string AgentId { get; set; } = string.Empty;
