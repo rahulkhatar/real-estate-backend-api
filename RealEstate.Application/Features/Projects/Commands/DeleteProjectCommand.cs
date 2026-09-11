@@ -1,5 +1,6 @@
 using MediatR;
 using RealEstate.Application.Common.Caching;
+using RealEstate.Application.Features.Properties.Commands;
 using RealEstate.Core.Exceptions;
 using RealEstate.Core.Interfaces;
 
@@ -10,18 +11,20 @@ public record DeleteProjectCommand(string Id) : IRequest, IInvalidatesCache
     public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Project];
 }
 
-public class DeleteProjectCommandHandler(IProjectRepository repository, IPropertyRepository propertyRepository)
-    : IRequestHandler<DeleteProjectCommand>
+public class DeleteProjectCommandHandler(
+    IProjectRepository repository,
+    IPropertyRepository propertyRepository,
+    IMediator mediator) : IRequestHandler<DeleteProjectCommand>
 {
     public async Task Handle(DeleteProjectCommand request, CancellationToken cancellationToken)
     {
         var project = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(Core.Entities.Project), request.Id);
 
+        // Cascade: each property's own delete handler cascades further into its units.
         var properties = await propertyRepository.GetByProjectIdAsync(project.Id, cancellationToken);
-        if (properties.Count > 0)
-            throw new ConflictException(
-                $"Cannot delete project '{project.Name}': it still has {properties.Count} propert{(properties.Count == 1 ? "y" : "ies")} attached.");
+        foreach (var property in properties)
+            await mediator.Send(new DeletePropertyCommand(property.Id), cancellationToken);
 
         await repository.DeleteAsync(request.Id, cancellationToken);
     }

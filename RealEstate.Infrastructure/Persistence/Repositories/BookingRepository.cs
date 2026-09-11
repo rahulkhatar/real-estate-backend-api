@@ -13,6 +13,10 @@ public class BookingRepository(IMongoDbContext context)
             .SortByDescending(b => b.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Booking>> GetByUnitIdAsync(string unitId, CancellationToken ct = default) =>
+        await Collection.Find(b => b.UnitId == unitId && !b.IsDeleted)
+            .ToListAsync(ct);
+
     public async Task<bool> HasActiveBookingForUnitAsync(string unitId, CancellationToken ct = default) =>
         await Collection.Find(b =>
                 b.UnitId == unitId &&

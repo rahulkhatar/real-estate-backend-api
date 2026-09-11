@@ -15,6 +15,9 @@ public record DeleteUnitCommand(string Id) : IRequest, IInvalidatesCache
 public class DeleteUnitCommandHandler(
     IUnitRepository repository,
     IPropertyRepository propertyRepository,
+    IUnitLayoutRepository unitLayoutRepository,
+    IBookingRepository bookingRepository,
+    IPaymentRepository paymentRepository,
     IListingEmbeddingRepository embeddingRepository,
     ILogger<DeleteUnitCommandHandler> logger) : IRequestHandler<DeleteUnitCommand>
 {
@@ -24,6 +27,20 @@ public class DeleteUnitCommandHandler(
             ?? throw new NotFoundException(nameof(Core.Entities.Unit), request.Id);
 
         await repository.DeleteAsync(request.Id, cancellationToken);
+
+        var layouts = await unitLayoutRepository.GetByUnitIdAsync(request.Id, cancellationToken);
+        foreach (var layout in layouts)
+            await unitLayoutRepository.DeleteAsync(layout.Id, cancellationToken);
+
+        var bookings = await bookingRepository.GetByUnitIdAsync(request.Id, cancellationToken);
+        foreach (var booking in bookings)
+        {
+            var payments = await paymentRepository.GetHistoryByBookingIdAsync(booking.Id, cancellationToken);
+            foreach (var payment in payments)
+                await paymentRepository.DeleteAsync(payment.Id, cancellationToken);
+
+            await bookingRepository.DeleteAsync(booking.Id, cancellationToken);
+        }
 
         var property = await propertyRepository.GetByIdAsync(unit.PropertyId, cancellationToken);
         if (property is not null)
