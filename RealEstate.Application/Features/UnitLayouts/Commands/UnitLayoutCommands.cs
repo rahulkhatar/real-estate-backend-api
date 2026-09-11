@@ -72,18 +72,21 @@ public class UpdateUnitLayoutCommandHandler(IUnitLayoutRepository repository, IM
     }
 }
 
-public record DeleteUnitLayoutCommand(string Id) : IRequest, IInvalidatesCache
+// IRequest<Unit>, not bare IRequest -- see DeleteProjectCommand for why: CacheInvalidationBehavior
+// only applies to requests that actually implement IRequest<TResponse>.
+public record DeleteUnitLayoutCommand(string Id) : IRequest<MediatR.Unit>, IInvalidatesCache
 {
     public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.UnitLayout];
 }
 
-public class DeleteUnitLayoutCommandHandler(IUnitLayoutRepository repository) : IRequestHandler<DeleteUnitLayoutCommand>
+public class DeleteUnitLayoutCommandHandler(IUnitLayoutRepository repository) : IRequestHandler<DeleteUnitLayoutCommand, MediatR.Unit>
 {
-    public async Task Handle(DeleteUnitLayoutCommand request, CancellationToken cancellationToken)
+    public async Task<MediatR.Unit> Handle(DeleteUnitLayoutCommand request, CancellationToken cancellationToken)
     {
         _ = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(UnitLayout), request.Id);
 
         await repository.DeleteAsync(request.Id, cancellationToken);
+        return MediatR.Unit.Value;
     }
 }
