@@ -6,7 +6,9 @@ using RealEstate.Core.Interfaces;
 
 namespace RealEstate.Application.Features.Units.Commands;
 
-public record DeleteUnitCommand(string Id) : IRequest, IInvalidatesCache
+// IRequest<Unit>, not bare IRequest -- see DeleteProjectCommand for why: CacheInvalidationBehavior
+// only applies to requests that actually implement IRequest<TResponse>.
+public record DeleteUnitCommand(string Id) : IRequest<Unit>, IInvalidatesCache
 {
     // Also bumps Property: deletion decrements the parent property's TotalUnits.
     public IReadOnlyCollection<CacheEntityType> AffectedEntityTypes => [CacheEntityType.Unit, CacheEntityType.Property];
@@ -19,9 +21,9 @@ public class DeleteUnitCommandHandler(
     IBookingRepository bookingRepository,
     IPaymentRepository paymentRepository,
     IListingEmbeddingRepository embeddingRepository,
-    ILogger<DeleteUnitCommandHandler> logger) : IRequestHandler<DeleteUnitCommand>
+    ILogger<DeleteUnitCommandHandler> logger) : IRequestHandler<DeleteUnitCommand, Unit>
 {
-    public async Task Handle(DeleteUnitCommand request, CancellationToken cancellationToken)
+    public async Task<Unit> Handle(DeleteUnitCommand request, CancellationToken cancellationToken)
     {
         var unit = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(Core.Entities.Unit), request.Id);
@@ -57,5 +59,7 @@ public class DeleteUnitCommandHandler(
         {
             logger.LogWarning(ex, "Failed to remove unit {UnitId} from the AI chat index.", request.Id);
         }
+
+        return Unit.Value;
     }
 }
